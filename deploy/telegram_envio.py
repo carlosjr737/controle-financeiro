@@ -34,3 +34,7 @@ def responder_callback(callback_id: str, texto: str = "") -> None:
 
 def editar_mensagem(chat_id, message_id, texto: str) -> None:
     _api("editMessageText", {"chat_id": chat_id, "message_id": message_id, "text": texto})
+
+
+def responder_chat(chat_id, texto: str) -> None:
+    _api("sendMessage", {"chat_id": chat_id, "text": texto})
