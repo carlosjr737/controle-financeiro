@@ -1,0 +1,11 @@
+# Núcleo
+SQLAlchemy>=2.0
+openpyxl>=3.1
+# Adaptadores de deploy
+requests>=2.31
+gspread>=6.0
+google-auth>=2.0
+anthropic>=0.40
+psycopg[binary]>=3.1      # driver Postgres (Supabase) — se usar DATABASE_URL postgresql+psycopg
+# (opcional) botões interativos no Telegram:
+# python-telegram-bot>=21

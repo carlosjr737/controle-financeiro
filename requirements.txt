@@ -1,0 +1,7 @@
+SQLAlchemy>=2.0
+openpyxl>=3.1
+requests>=2.31
+gspread>=6.0
+google-auth>=2.0
+anthropic>=0.40
+psycopg[binary]>=3.1

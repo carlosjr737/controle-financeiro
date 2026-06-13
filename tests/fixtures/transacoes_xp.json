@@ -1,0 +1,8 @@
+[
+  {"id": "tx_1", "description": "DL *UBERRIDES", "amount": 27.98, "date": "2026-06-02",
+   "type": "DEBIT", "creditCardMetadata": {"installmentNumber": 1, "totalInstallments": 1}},
+  {"id": "tx_2", "description": "SUPERMERCADO E PADARIA", "amount": 318.0, "date": "2026-06-03",
+   "type": "DEBIT", "creditCardMetadata": {"installmentNumber": 1, "totalInstallments": 1}},
+  {"id": "tx_3", "description": "EBN *SPOTIFY", "amount": 40.9, "date": "2026-06-05",
+   "type": "DEBIT", "creditCardMetadata": {"installmentNumber": 1, "totalInstallments": 1}}
+]

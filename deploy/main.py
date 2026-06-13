@@ -1,0 +1,48 @@
+"""Entrypoint do ciclo diário: ingestão (janela rolante) -> classificação ->
+resumo no Telegram. Chamado pela função serverless do Vercel (api/cron_diario)."""
+import os
+import datetime
+
+from controle_financeiro.config import engine_from_env
+from controle_financeiro.db import criar_sessao, Base
+from controle_financeiro.classificador import Classificador
+from controle_financeiro.fontes.banco_mcp import BancoMcpFonte
+from controle_financeiro.orquestrador import executar_ciclo
+from controle_financeiro.sheets.orcamento_sync import sincronizar_orcamento
+from controle_financeiro.ia.fallback import criar_fallback_ia
+
+from deploy.transporte_banco_mcp import criar_transporte
+from deploy.cliente_ia import criar_cliente_ia
+from deploy.telegram_envio import criar_enviar
+from deploy.sheets_adapter import criar_leitor_orcamento
+from deploy.runner import janela_datas
+
+
+def rodar_ciclo(hoje: datetime.date | None = None) -> dict:
+    hoje = hoje or datetime.date.today()
+    mes = hoje.strftime("%Y-%m")
+    teto = float(os.environ.get("TETO_MENSAL", "27060"))
+    portador = os.environ.get("PORTADOR", "Carlos")
+    janela_dias = int(os.environ.get("JANELA_DIAS", "7"))
+    desde, ate = janela_datas(hoje, janela_dias)
+
+    engine = engine_from_env(); Base.metadata.create_all(engine)
+    s = criar_sessao(engine)
+
+    # orçamento do Sheets (cria categorias/linhas do mês)
+    sincronizar_orcamento(s, mes, criar_leitor_orcamento())
+
+    # fonte (cartão XP) + classificador com IA de fallback
+    fonte = BancoMcpFonte(transporte=criar_transporte(),
+                          account_id=os.environ["XP_ACCOUNT_ID_CARTAO"])
+    classificador = Classificador(s, fallback=criar_fallback_ia(criar_cliente_ia()))
+
+    return executar_ciclo(
+        s, fonte, classificador, mes=mes, data=hoje.isoformat(),
+        enviar=criar_enviar(), desde=desde, ate=ate,
+        portador=portador, teto=teto, tipo="cartao",
+    )
+
+
+if __name__ == "__main__":
+    print(rodar_ciclo())
