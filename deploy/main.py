@@ -39,7 +39,9 @@ def rodar_ciclo(hoje: datetime.date | None = None) -> dict:
 
     fonte = BancoMcpFonte(transporte=criar_transporte(),
                           account_id=os.environ["XP_ACCOUNT_ID_CARTAO"])
-    classificador = Classificador(s, fallback=criar_fallback_ia(criar_cliente_ia()))
+    # IA é opcional: só ativa se LLM_API_KEY estiver definida
+    fallback = criar_fallback_ia(criar_cliente_ia()) if os.environ.get("LLM_API_KEY") else None
+    classificador = Classificador(s, fallback=fallback)
 
     resultado = executar_ciclo(
         s, fonte, classificador, mes=mes, data=hoje.isoformat(),
