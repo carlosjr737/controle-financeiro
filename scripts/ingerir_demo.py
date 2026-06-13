@@ -13,7 +13,7 @@ def main():
     gerar_regras_do_historico(s)
 
     raws = json.load(open("tests/fixtures/transacoes_xp.json"))
-    fonte = BancoMcpFonte(transporte=lambda c, p: {"results": raws}, account_id="demo")
+    fonte = BancoMcpFonte(transporte=lambda c, b: {"result": {"results": raws}}, account_id="demo")
     resumo = ingerir(s, fonte, Classificador(s), "2026-06-01", "2026-06-30", portador="Carlos")
 
     print("Resumo:", resumo)

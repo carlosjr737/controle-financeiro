@@ -6,29 +6,19 @@ class _Resp:
     def raise_for_status(self): pass
     def json(self): return self._p
 
-def test_transporte_usa_bearer_e_retorna_json(monkeypatch):
-    capturado = {}
-    def fake_get(url, params=None, headers=None, timeout=None):
-        capturado["url"] = url; capturado["params"] = params; capturado["headers"] = headers
-        return _Resp({"results": [{"id": "t1"}]})
-    monkeypatch.setattr(requests, "get", fake_get)
+def test_transporte_post_bearer_json(monkeypatch):
+    cap = {}
+    def fake_post(url, json=None, headers=None, timeout=None):
+        cap["url"] = url; cap["json"] = json; cap["headers"] = headers
+        return _Resp({"ok": True, "result": {"results": []}})
+    monkeypatch.setattr(requests, "post", fake_post)
 
-    transporte = criar_transporte(base_url="https://api.mcp.ai", token="tk_abc")
-    out = transporte("/v1/openfinance/transactions", {"account_id": "acc1"})
+    transporte = criar_transporte(base_url="https://api.mcp.ai/api/openfinance",
+                                  token="sk_live_x")
+    out = transporte("/transactions/list", {"account_id": "a"})
 
-    assert out == {"results": [{"id": "t1"}]}
-    assert capturado["url"] == "https://api.mcp.ai/v1/openfinance/transactions"
-    assert capturado["headers"]["Authorization"] == "Bearer tk_abc"
-    assert capturado["params"]["account_id"] == "acc1"
-
-def test_transporte_token_na_url(monkeypatch):
-    capturado = {}
-    def fake_get(url, params=None, headers=None, timeout=None):
-        capturado["params"] = params; capturado["headers"] = headers
-        return _Resp({"ok": True})
-    monkeypatch.setattr(requests, "get", fake_get)
-    transporte = criar_transporte(base_url="https://api.mcp.ai", token="tk_x",
-                                  auth_no_header=True)
-    transporte("/v1/x", {})
-    assert capturado["params"]["token"] == "tk_x"
-    assert "Authorization" not in capturado["headers"]
+    assert out["ok"] is True
+    assert cap["url"] == "https://api.mcp.ai/api/openfinance/transactions/list"
+    assert cap["headers"]["Authorization"] == "Bearer sk_live_x"
+    assert cap["headers"]["Content-Type"] == "application/json"
+    assert cap["json"] == {"account_id": "a"}
