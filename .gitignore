@@ -1,6 +1,8 @@
 # segredos
 .env
 *.env
+*.json
+!vercel.json
 credenciais*.json
 service_account*.json
 # dados financeiros pessoais (ficam só no seu PC; usados no seed local)

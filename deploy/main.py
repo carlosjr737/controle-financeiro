@@ -1,5 +1,5 @@
 """Entrypoint do ciclo diário: ingestão (janela rolante) -> classificação ->
-resumo no Telegram. Chamado pela função serverless do Vercel (api/cron_diario)."""
+resumo no Telegram. O sync do orçamento é não-fatal."""
 import os
 import datetime
 
@@ -29,19 +29,26 @@ def rodar_ciclo(hoje: datetime.date | None = None) -> dict:
     engine = engine_from_env(); Base.metadata.create_all(engine)
     s = criar_sessao(engine)
 
-    # orçamento do Sheets (cria categorias/linhas do mês)
-    sincronizar_orcamento(s, mes, criar_leitor_orcamento())
+    # sync do orçamento é não-fatal: se a planilha tiver um problema,
+    # ainda assim ingerimos e mandamos o resumo.
+    orcamento_aviso = None
+    try:
+        sincronizar_orcamento(s, mes, criar_leitor_orcamento())
+    except Exception as e:  # noqa: BLE001
+        orcamento_aviso = f"sync de orçamento falhou: {e}"
 
-    # fonte (cartão XP) + classificador com IA de fallback
     fonte = BancoMcpFonte(transporte=criar_transporte(),
                           account_id=os.environ["XP_ACCOUNT_ID_CARTAO"])
     classificador = Classificador(s, fallback=criar_fallback_ia(criar_cliente_ia()))
 
-    return executar_ciclo(
+    resultado = executar_ciclo(
         s, fonte, classificador, mes=mes, data=hoje.isoformat(),
         enviar=criar_enviar(), desde=desde, ate=ate,
         portador=portador, teto=teto, tipo="cartao",
     )
+    if orcamento_aviso:
+        resultado["orcamento_aviso"] = orcamento_aviso
+    return resultado
 
 
 if __name__ == "__main__":
