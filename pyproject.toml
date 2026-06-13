@@ -1,2 +1,20 @@
+[project]
+name = "controle-financeiro"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+  "SQLAlchemy>=2.0",
+  "openpyxl>=3.1",
+  "requests>=2.31",
+  "gspread>=6.0",
+  "google-auth>=2.0",
+  "anthropic>=0.40",
+  "psycopg[binary]>=3.1",
+]
+
+# uv (usado pelo Vercel) não deve tentar "buildar" o projeto como pacote — só instalar deps
+[tool.uv]
+package = false
+
 [tool.vercel]
 entrypoint = "api.cron_diario:handler"
