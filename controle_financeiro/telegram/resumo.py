@@ -37,10 +37,12 @@ def montar_resumo_diario(sessao, mes: str, data: str, teto: float | None = None)
         partes.append(f"Pra confirmar ({len(pendentes)}) — veja os botões abaixo.")
 
     realizado_total = sum(l["realizado"] for l in linhas)
+    teto_txt = f" (teto R$ {teto:.0f})" if teto else ""
+    partes.append(f"Já gasto no mês: R$ {realizado_total:.0f}{teto_txt}")
+
     dias_no_mes = monthrange(int(mes[:4]), int(mes[5:7]))[1]
     dia_atual = int(data[8:10])
     proj = projecao_fechamento(realizado_total, dia_atual, dias_no_mes)
-    linha_teto = f" vs teto R$ {teto:.0f}" if teto else ""
-    partes.append(f"Projeção de fechamento: R$ {proj:.0f}{linha_teto}")
+    partes.append(f"Projeção (estimativa no ritmo atual): R$ {proj:.0f}")
 
     return "\n".join(partes)
