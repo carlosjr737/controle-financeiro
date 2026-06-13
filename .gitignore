@@ -9,5 +9,6 @@ dados/
 __pycache__/
 *.pyc
 .pytest_cache/
+pytest-cache-files-*
 *.db
 controle.db
