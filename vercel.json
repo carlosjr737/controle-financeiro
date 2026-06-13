@@ -3,8 +3,5 @@
   "crons": [
     { "path": "/api/cron_diario", "schedule": "0 11 * * *" },
     { "path": "/api/fechamento",  "schedule": "0 9 1 * *" }
-  ],
-  "functions": {
-    "api/*.py": { "maxDuration": 60 }
-  }
+  ]
 }
