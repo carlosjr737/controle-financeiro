@@ -3,11 +3,13 @@ from controle_financeiro.upsert import upsert_transacao
 from controle_financeiro.models import Categoria
 
 def ingerir(sessao, fonte, classificador, desde: str, ate: str,
-            portador: str | None = None, tipo: str | None = None) -> dict:
+            portador: str | None = None, tipo: str | None = None,
+            dia_fechamento: int | None = None) -> dict:
     raws = fonte.buscar_transacoes(desde, ate)
     novas = duplicadas = 0
     for raw in raws:
-        dados = mapear_transacao(raw, portador=portador, tipo=tipo)
+        dados = mapear_transacao(raw, portador=portador, tipo=tipo,
+                                 dia_fechamento=dia_fechamento)
         t, criada = upsert_transacao(sessao, dados)
         if not criada:
             duplicadas += 1

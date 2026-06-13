@@ -17,5 +17,5 @@ def test_resumo_contem_alertas_e_pendentes():
 
     assert "Resumo de 2026-06-13" in texto
     assert "Lazer" in texto and "estourou" in texto.lower()
-    assert "MSN BELVEDERE" in texto          # pendente listado p/ confirmação
+    assert "Pra confirmar (1)" in texto      # pendentes agora vão pros botões
     assert "Projeção" in texto

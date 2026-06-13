@@ -101,3 +101,39 @@ def criar_escritor_realizado(planilha=None):
                            ln["realizado"], ln["diferenca"]])
         return len(linhas)
     return escritor
+
+
+def criar_escritor_fatura(planilha=None):
+    """Escreve as transações do cartão na aba 'Fatura [mês]' (que a DRE soma).
+    Linhas do sistema levam Status 'OF' + um id na coluna H pra deduplicar e
+    atualizar a classificação depois. Não toca nas linhas manuais."""
+    from controle_financeiro.dre_fatura import aba_fatura, diff_fatura
+    CABECALHO = ["Data", "Estabelecimento", "Portador", "Valor", "Parcela",
+                 "Classificação", "Status", "of_id"]
+
+    def escritor(mes: str, linhas_db: list) -> dict:
+        import gspread
+        pl = planilha or _abrir_planilha()
+        try:
+            ws = pl.worksheet(aba_fatura(mes))
+        except gspread.WorksheetNotFound:
+            ws = pl.add_worksheet(title=aba_fatura(mes), rows=2000, cols=10)
+            ws.append_row(CABECALHO)
+
+        valores = ws.get_all_values()
+        existentes = {}
+        for i, row in enumerate(valores):
+            if len(row) > 7 and row[6] == "OF":
+                existentes[row[7]] = {"row": i + 1,
+                                      "classificacao": row[5] if len(row) > 5 else ""}
+
+        anexar, atualizar = diff_fatura(linhas_db, existentes)
+        if anexar:
+            novas = [[l["data"], l["estabelecimento"], l["portador"], l["valor"],
+                      l["parcela"], l["classificacao"], "OF", l["id_externo"]]
+                     for l in anexar]
+            ws.append_rows(novas, value_input_option="USER_ENTERED")
+        for row, classificacao in atualizar:
+            ws.update_cell(row, 6, classificacao)   # coluna F = Classificação
+        return {"anexadas": len(anexar), "atualizadas": len(atualizar)}
+    return escritor
