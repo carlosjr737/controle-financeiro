@@ -1,11 +1,8 @@
-from calendar import monthrange
 from controle_financeiro.models import Transacao, Categoria
-from controle_financeiro.comparador import comparar_orcamento, projecao_fechamento
-from controle_financeiro.alertas import linhas_em_alerta
+from controle_financeiro.comparador import comparar_orcamento
 
 def montar_resumo_diario(sessao, mes: str, data: str, teto: float | None = None) -> str:
     linhas = comparar_orcamento(sessao, mes)
-    alertas = linhas_em_alerta(linhas)
     pendentes = (sessao.query(Transacao)
                  .filter(Transacao.mes_competencia == mes,
                          Transacao.status_classificacao == "pendente").all())
@@ -26,23 +23,30 @@ def montar_resumo_diario(sessao, mes: str, data: str, teto: float | None = None)
     else:
         partes.append("Sem gastos novos hoje.")
 
-    if alertas:
-        partes.append("Orçamento em atenção:")
-        for a in alertas:
-            marca = "estourou" if a["status"] == "vermelho" else f"{a['pct']:.0%}"
-            partes.append(f"  - {a['linha']}: R$ {a['realizado']:.0f} / "
-                          f"R$ {a['meta']:.0f} ({marca})")
-
-    if pendentes:
-        partes.append(f"Pra confirmar ({len(pendentes)}) — veja os botões abaixo.")
-
     realizado_total = sum(l["realizado"] for l in linhas)
     teto_txt = f" (teto R$ {teto:.0f})" if teto else ""
     partes.append(f"Já gasto no mês: R$ {realizado_total:.0f}{teto_txt}")
 
-    dias_no_mes = monthrange(int(mes[:4]), int(mes[5:7]))[1]
-    dia_atual = int(data[8:10])
-    proj = projecao_fechamento(realizado_total, dia_atual, dias_no_mes)
-    partes.append(f"Projeção (estimativa no ritmo atual): R$ {proj:.0f}")
+    # FOCO: o que estourou e o que está quase
+    estourou = sorted([l for l in linhas if l["status"] == "vermelho"],
+                      key=lambda l: l["pct"], reverse=True)
+    quase = sorted([l for l in linhas if l["status"] == "amarelo"],
+                   key=lambda l: l["pct"], reverse=True)
+
+    if estourou:
+        partes.append("🔴 Estourou:")
+        for a in estourou:
+            partes.append(f"  - {a['linha']}: R$ {a['realizado']:.0f} / R$ {a['meta']:.0f} "
+                          f"(+R$ {a['realizado'] - a['meta']:.0f})")
+    if quase:
+        partes.append("🟡 Quase estourando:")
+        for a in quase:
+            partes.append(f"  - {a['linha']}: R$ {a['realizado']:.0f} / R$ {a['meta']:.0f} "
+                          f"({a['pct']:.0%})")
+    if not estourou and not quase:
+        partes.append("🟢 Tudo dentro do orçamento.")
+
+    if pendentes:
+        partes.append(f"Pra confirmar ({len(pendentes)}) — veja os botões abaixo.")
 
     return "\n".join(partes)
