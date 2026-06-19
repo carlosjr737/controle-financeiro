@@ -1,6 +1,7 @@
 # controle_financeiro/aprendizado.py
 from controle_financeiro.models import Transacao, Categoria, Regra
 from controle_financeiro.normalizacao import normalizar_estabelecimento
+from controle_financeiro.regras_negocio import eh_categoria_pagamento
 
 PRIORIDADE_CORRECAO = 200
 
@@ -11,7 +12,11 @@ def registrar_correcao(sessao, transacao_id: int, categoria_nome: str) -> Regra:
         cat = Categoria(nome=categoria_nome); sessao.add(cat); sessao.flush()
 
     t.categoria_id = cat.id
-    t.status_classificacao = "confirmada"
+    if eh_categoria_pagamento(cat.nome):
+        t.valor = -abs(t.valor)
+        t.status_classificacao = "pagamento"
+    else:
+        t.status_classificacao = "confirmada"
     t.confianca = 1.0
 
     padrao = normalizar_estabelecimento(t.estabelecimento)

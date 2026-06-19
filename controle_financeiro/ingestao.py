@@ -1,7 +1,7 @@
 from controle_financeiro.mapeador import mapear_transacao
 from controle_financeiro.upsert import upsert_transacao
 from controle_financeiro.models import Categoria
-from controle_financeiro.regras_negocio import eh_pagamento_fatura
+from controle_financeiro.regras_negocio import eh_pagamento_fatura, eh_categoria_pagamento
 
 def _garantir_categoria(sessao, nome):
     cat = sessao.query(Categoria).filter_by(nome=nome).one_or_none()
@@ -44,7 +44,13 @@ def ingerir(sessao, fonte, classificador, desde: str, ate: str,
         if not criada:
             continue
         r = classificador.classificar(t.estabelecimento)
-        if r.categoria_nome:
+        if r.categoria_nome and eh_categoria_pagamento(r.categoria_nome):
+            cat = _garantir_categoria(sessao, "PGTO FATURA")
+            t.categoria_id = cat.id
+            t.valor = -abs(t.valor)
+            t.status_classificacao = "pagamento"
+            t.confianca = 1.0
+        elif r.categoria_nome:
             cat = sessao.query(Categoria).filter_by(nome=r.categoria_nome).one_or_none()
             t.categoria_id = cat.id if cat else None
             t.status_classificacao = "sugerida"

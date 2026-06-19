@@ -47,7 +47,7 @@ def rodar_ciclo(hoje: datetime.date | None = None) -> dict:
         orcamento_aviso = None
         try:
             sincronizar_orcamento(s, mes, criar_leitor_orcamento())
-            sincronizar_categorias(s, criar_leitor_descricoes_dre()())  # vocabulário da DRE
+            sincronizar_categorias(s, criar_leitor_descricoes_dre()() + ["PGTO FATURA"])  # vocabulário da DRE + pagamento
         except Exception as e:  # noqa: BLE001
             orcamento_aviso = f"sync de orçamento/categorias falhou: {e}"
 
