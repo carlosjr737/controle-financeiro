@@ -21,3 +21,15 @@ def sincronizar_orcamento(sessao, mes: str, leitor: Callable[[], list[dict]]) ->
         n += 1
     sessao.commit()
     return n
+
+
+def sincronizar_categorias(sessao, nomes: list) -> int:
+    """Garante que cada nome (ex.: Descrições da DRE) exista como Categoria."""
+    existentes = {c.nome for c in sessao.query(Categoria).all()}
+    n = 0
+    for nome in nomes:
+        nome = (nome or "").strip()
+        if nome and nome not in existentes:
+            sessao.add(Categoria(nome=nome)); existentes.add(nome); n += 1
+    sessao.commit()
+    return n

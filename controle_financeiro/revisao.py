@@ -38,6 +38,6 @@ def transacoes_para_revisar(sessao, mes: str, limite: int = 12) -> list:
     itens = []
     for t in q:
         cat = sessao.get(Categoria, t.categoria_id) if t.categoria_id else None
-        itens.append({"id": t.id, "estabelecimento": t.estabelecimento,
+        itens.append({"id": t.id, "estabelecimento": t.estabelecimento, "data": t.data or "",
                       "valor": abs(t.valor), "categoria_nome": cat.nome if cat else None})
     return itens

@@ -8,7 +8,7 @@ from controle_financeiro.db import criar_sessao, Base
 from controle_financeiro.classificador import Classificador
 from controle_financeiro.fontes.banco_mcp import BancoMcpFonte
 from controle_financeiro.orquestrador import executar_ciclo
-from controle_financeiro.sheets.orcamento_sync import sincronizar_orcamento
+from controle_financeiro.sheets.orcamento_sync import sincronizar_orcamento, sincronizar_categorias
 from controle_financeiro.ia.fallback import criar_fallback_ia
 from controle_financeiro.competencia import competencia_fatura
 from controle_financeiro.revisao import (reclassificar_pendentes,
@@ -19,7 +19,8 @@ from controle_financeiro.dre_fatura import linhas_para_fatura
 from deploy.transporte_banco_mcp import criar_transporte
 from deploy.cliente_ia import criar_cliente_ia
 from deploy.telegram_envio import criar_enviar, criar_enviar_botoes
-from deploy.sheets_adapter import criar_leitor_orcamento, criar_escritor_fatura
+from deploy.sheets_adapter import (criar_leitor_orcamento, criar_escritor_fatura,
+                                   criar_leitor_descricoes_dre)
 from deploy.runner import janela_datas
 
 
@@ -46,8 +47,9 @@ def rodar_ciclo(hoje: datetime.date | None = None) -> dict:
     orcamento_aviso = None
     try:
         sincronizar_orcamento(s, mes, criar_leitor_orcamento())
+        sincronizar_categorias(s, criar_leitor_descricoes_dre()())  # vocabulário da DRE
     except Exception as e:  # noqa: BLE001
-        orcamento_aviso = f"sync de orçamento falhou: {e}"
+        orcamento_aviso = f"sync de orçamento/categorias falhou: {e}"
 
     fonte = BancoMcpFonte(transporte=criar_transporte(),
                           account_id=os.environ["XP_ACCOUNT_ID_CARTAO"])
@@ -69,8 +71,9 @@ def rodar_ciclo(hoje: datetime.date | None = None) -> dict:
         freq = categorias_frequentes(s)
         itens = transacoes_para_revisar(s, mes, limite=revisao_max)
         for item in itens:
-            enviar_botoes(f'"{item["estabelecimento"]}" R$ {item["valor"]:.0f}',
-                          montar_teclado(item["id"], item["categoria_nome"], freq))
+            enviar_botoes(
+                f'{item.get("data","")} · "{item["estabelecimento"]}" R$ {item["valor"]:.0f}',
+                montar_teclado(item["id"], item["categoria_nome"], freq))
         resultado["revisao_enviada"] = len(itens)
     except Exception as e:  # noqa: BLE001
         resultado["revisao_aviso"] = str(e)

@@ -38,3 +38,8 @@ def editar_mensagem(chat_id, message_id, texto: str) -> None:
 
 def responder_chat(chat_id, texto: str) -> None:
     _api("sendMessage", {"chat_id": chat_id, "text": texto})
+
+
+def editar_teclado(chat_id, message_id, teclado: dict) -> None:
+    _api("editMessageReplyMarkup",
+         {"chat_id": chat_id, "message_id": message_id, "reply_markup": teclado})

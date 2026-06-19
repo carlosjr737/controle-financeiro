@@ -137,3 +137,23 @@ def criar_escritor_fatura(planilha=None):
             ws.update_cell(row, 6, classificacao)   # coluna F = Classificação
         return {"anexadas": len(anexar), "atualizadas": len(atualizar)}
     return escritor
+
+
+def criar_leitor_descricoes_dre(planilha=None, aba: str = "DRE"):
+    """Lê as Descrições (coluna B) das linhas de gasto da DRE — o vocabulário
+    exato que as fórmulas SUMIF esperam."""
+    def leitor() -> list:
+        pl = planilha or _abrir_planilha()
+        ws = pl.worksheet(aba)
+        nomes = []
+        for row in ws.get_all_values()[1:]:           # pula cabeçalho
+            desc = (row[1].strip() if len(row) > 1 else "")
+            if desc and desc.lower() != "descrição":
+                nomes.append(desc)
+        # únicos, preservando ordem
+        vistos, unicos = set(), []
+        for n in nomes:
+            if n not in vistos:
+                vistos.add(n); unicos.append(n)
+        return unicos
+    return leitor

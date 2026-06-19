@@ -1,14 +1,17 @@
-"""Processa updates do Telegram: cliques de botão e mensagens de texto."""
+"""Processa updates do Telegram: cliques de botão (confirmar/corrigir/abrir lista)
+e mensagens de texto (comandos + perguntas via IA). Só responde ao dono."""
 import os
 import datetime
 
 from controle_financeiro.config import engine_from_env
 from controle_financeiro.db import criar_sessao, Base
+from controle_financeiro.models import Categoria
 from controle_financeiro.competencia import competencia_fatura
-from controle_financeiro.telegram.botoes import parse_callback
+from controle_financeiro.telegram.botoes import parse_callback, montar_pagina_categorias
 from controle_financeiro.aprendizado import confirmar_sugestao, corrigir_por_categoria_id
 from controle_financeiro.consultas import responder_comando, contexto_para_ia
-from deploy.telegram_envio import responder_callback, editar_mensagem, responder_chat
+from deploy.telegram_envio import (responder_callback, editar_mensagem,
+                                   editar_teclado, responder_chat)
 
 
 def _sessao():
@@ -19,7 +22,6 @@ def _mes_hoje():
     hoje = datetime.date.today()
     dia = int(os.environ.get("DIA_FECHAMENTO", "6"))
     return competencia_fatura(hoje.isoformat(), dia), hoje.isoformat()
-
 
 def _eh_dono(chat_id) -> bool:
     dono = os.environ.get("TELEGRAM_CHAT_ID")
@@ -36,11 +38,23 @@ def tratar_update(update: dict) -> None:
 
 
 def _tratar_callback(cq):
-    m0 = cq.get("message") or {}
-    if not _eh_dono((m0.get("chat") or {}).get("id")):
+    m = cq.get("message") or {}
+    chat = (m.get("chat") or {})
+    if not _eh_dono(chat.get("id")):
         return
     parsed = parse_callback(cq.get("data", ""))
     s = _sessao()
+
+    # abrir lista paginada de categorias (edita só o teclado)
+    if parsed[0] == "cat":
+        txid, page = parsed[1], parsed[2]
+        cats = [(c.id, c.nome) for c in s.query(Categoria).order_by(Categoria.nome).all()]
+        if chat.get("id") and m.get("message_id"):
+            editar_teclado(chat["id"], m["message_id"],
+                           montar_pagina_categorias(txid, cats, page))
+        responder_callback(cq["id"], "")
+        return
+
     if parsed[0] == "ok":
         feedback = "✅ " + confirmar_sugestao(s, parsed[1])
     elif parsed[0] == "set":
@@ -48,9 +62,8 @@ def _tratar_callback(cq):
     else:
         feedback = "ignorado"
     responder_callback(cq["id"], feedback)
-    m = cq.get("message") or {}
-    if m.get("chat") and m.get("message_id"):
-        editar_mensagem(m["chat"]["id"], m["message_id"], f"{m.get('text','')}\n{feedback}")
+    if chat.get("id") and m.get("message_id"):
+        editar_mensagem(chat["id"], m["message_id"], f"{m.get('text','')}\n{feedback}")
 
 
 def _tratar_mensagem(msg):
@@ -61,7 +74,6 @@ def _tratar_mensagem(msg):
     s = _sessao()
     mes, hoje = _mes_hoje()
     teto = float(os.environ.get("TETO_MENSAL", "27060"))
-
     if texto.startswith("/"):
         resp = responder_comando(s, texto, mes, teto, hoje)
     elif os.environ.get("LLM_API_KEY"):
