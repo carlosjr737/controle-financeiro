@@ -57,8 +57,10 @@ def _tratar_callback(cq):
 
     if parsed[0] == "ok":
         feedback = "✅ " + confirmar_sugestao(s, parsed[1])
+        _atualizar_fatura(s, parsed[1])
     elif parsed[0] == "set":
         feedback = "✅ " + corrigir_por_categoria_id(s, parsed[1], parsed[2])
+        _atualizar_fatura(s, parsed[1])
     else:
         feedback = "ignorado"
     responder_callback(cq["id"], feedback)
@@ -134,3 +136,17 @@ def _enviar_correcao(s, chat_id, mes, termo):
             f'{item.get("data","")} \u00b7 "{item["estabelecimento"]}" R$ {item["valor"]:.0f}\n'
             f'atual: {atual}',
             montar_teclado(item["id"], item["categoria_nome"], freq))
+
+
+def _atualizar_fatura(s, transacao_id):
+    """Reflete a correção na aba 'Fatura [mês]' imediatamente -> DRE soma na hora."""
+    from controle_financeiro.models import Transacao
+    from controle_financeiro.dre_fatura import linhas_para_fatura
+    from deploy.sheets_adapter import criar_escritor_fatura
+    t = s.get(Transacao, transacao_id)
+    if not t or not t.mes_competencia:
+        return
+    try:
+        criar_escritor_fatura()(t.mes_competencia, linhas_para_fatura(s, t.mes_competencia))
+    except Exception:  # noqa: BLE001
+        pass
