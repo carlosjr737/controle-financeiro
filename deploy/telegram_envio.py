@@ -43,3 +43,7 @@ def responder_chat(chat_id, texto: str) -> None:
 def editar_teclado(chat_id, message_id, teclado: dict) -> None:
     _api("editMessageReplyMarkup",
          {"chat_id": chat_id, "message_id": message_id, "reply_markup": teclado})
+
+
+def responder_chat_botoes(chat_id, texto: str, teclado: dict) -> None:
+    _api("sendMessage", {"chat_id": chat_id, "text": texto, "reply_markup": teclado})

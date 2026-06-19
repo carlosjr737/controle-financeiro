@@ -66,7 +66,7 @@ def responder_comando(sessao, texto: str, mes: str, teto, hoje: str) -> str:
     if cmd == "/pendentes":
         return pendentes_texto(sessao, mes)
     if cmd == "/ajuda":
-        return ("Comandos:\n/resumo — status do mês\n/linha <categoria> — detalhe de uma linha\n"
-                "/pendentes — o que falta confirmar\n\n"
+        return ("Comandos:\n/resumo — status do mês\n/revisar — classificar gastos (botões)\n"
+                "/linha <categoria> — detalhe de uma linha\n/pendentes — o que falta confirmar\n\n"
                 "Ou mande uma pergunta normal, ex.: “quanto gastei com iFood?”")
     return "Não conheço esse comando. Mande /ajuda."

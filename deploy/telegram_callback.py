@@ -11,7 +11,7 @@ from controle_financeiro.telegram.botoes import parse_callback, montar_pagina_ca
 from controle_financeiro.aprendizado import confirmar_sugestao, corrigir_por_categoria_id
 from controle_financeiro.consultas import responder_comando, contexto_para_ia
 from deploy.telegram_envio import (responder_callback, editar_mensagem,
-                                   editar_teclado, responder_chat)
+                                   editar_teclado, responder_chat, responder_chat_botoes)
 
 
 def _sessao():
@@ -74,6 +74,9 @@ def _tratar_mensagem(msg):
     s = _sessao()
     mes, hoje = _mes_hoje()
     teto = float(os.environ.get("TETO_MENSAL", "27060"))
+    if texto.lower().strip() == "/revisar":
+        _enviar_revisao(s, chat_id, mes)
+        return
     if texto.startswith("/"):
         resp = responder_comando(s, texto, mes, teto, hoje)
     elif os.environ.get("LLM_API_KEY"):
@@ -83,3 +86,27 @@ def _tratar_mensagem(msg):
         resp = ("Pra perguntas livres preciso da IA (LLM_API_KEY). Por ora use: "
                 "/resumo, /linha <categoria>, /pendentes, /ajuda.")
     responder_chat(chat_id, resp)
+
+
+def _enviar_revisao(s, chat_id, mes):
+    from controle_financeiro.classificador import Classificador
+    from controle_financeiro.ia.fallback import criar_fallback_ia
+    from controle_financeiro.revisao import (reclassificar_pendentes,
+                                             categorias_frequentes, transacoes_para_revisar)
+    from controle_financeiro.telegram.botoes import montar_teclado
+    fallback = None
+    if os.environ.get("LLM_API_KEY"):
+        from deploy.cliente_ia import criar_cliente_ia
+        fallback = criar_fallback_ia(criar_cliente_ia())
+    classificador = Classificador(s, fallback=fallback)
+    reclassificar_pendentes(s, classificador, mes, limite=12)
+    freq = categorias_frequentes(s)
+    itens = transacoes_para_revisar(s, mes, limite=12)
+    if not itens:
+        responder_chat(chat_id, "Nada pra revisar agora. \U0001F389")
+        return
+    for item in itens:
+        responder_chat_botoes(
+            chat_id,
+            f'{item.get("data","")} \u00b7 "{item["estabelecimento"]}" R$ {item["valor"]:.0f}',
+            montar_teclado(item["id"], item["categoria_nome"], freq))
