@@ -41,3 +41,20 @@ def transacoes_para_revisar(sessao, mes: str, limite: int = 12) -> list:
         itens.append({"id": t.id, "estabelecimento": t.estabelecimento, "data": t.data or "",
                       "valor": abs(t.valor), "categoria_nome": cat.nome if cat else None})
     return itens
+
+
+def transacoes_para_corrigir(sessao, mes: str, termo: str | None = None, limite: int = 12) -> list:
+    """Transações do mês pra corrigir (inclui as já classificadas). Filtra por
+    termo no estabelecimento, se dado."""
+    q = sessao.query(Transacao).filter(
+        Transacao.mes_competencia == mes,
+        Transacao.status_classificacao != "estorno")
+    if termo:
+        q = q.filter(Transacao.estabelecimento.ilike(f"%{termo.strip()}%"))
+    q = q.order_by(Transacao.id.desc()).limit(limite)
+    itens = []
+    for t in q:
+        cat = sessao.get(Categoria, t.categoria_id) if t.categoria_id else None
+        itens.append({"id": t.id, "estabelecimento": t.estabelecimento, "data": t.data or "",
+                      "valor": abs(t.valor), "categoria_nome": cat.nome if cat else None})
+    return itens

@@ -77,6 +77,11 @@ def _tratar_mensagem(msg):
     if texto.lower().strip() == "/revisar":
         _enviar_revisao(s, chat_id, mes)
         return
+    if texto.lower().startswith("/corrigir"):
+        partes = texto.split(maxsplit=1)
+        termo = partes[1] if len(partes) > 1 else None
+        _enviar_correcao(s, chat_id, mes, termo)
+        return
     if texto.startswith("/"):
         resp = responder_comando(s, texto, mes, teto, hoje)
     elif os.environ.get("LLM_API_KEY"):
@@ -103,10 +108,29 @@ def _enviar_revisao(s, chat_id, mes):
     freq = categorias_frequentes(s)
     itens = transacoes_para_revisar(s, mes, limite=12)
     if not itens:
-        responder_chat(chat_id, "Nada pra revisar agora. \U0001F389")
+        responder_chat(chat_id, "Nada pra revisar agora — tudo classificado! \U0001F389 "
+                                "(use /pendentes pra conferir)")
         return
     for item in itens:
         responder_chat_botoes(
             chat_id,
             f'{item.get("data","")} \u00b7 "{item["estabelecimento"]}" R$ {item["valor"]:.0f}',
+            montar_teclado(item["id"], item["categoria_nome"], freq))
+
+
+def _enviar_correcao(s, chat_id, mes, termo):
+    from controle_financeiro.revisao import categorias_frequentes, transacoes_para_corrigir
+    from controle_financeiro.telegram.botoes import montar_teclado
+    freq = categorias_frequentes(s)
+    itens = transacoes_para_corrigir(s, mes, termo=termo, limite=12)
+    if not itens:
+        extra = f" com \u201c{termo}\u201d" if termo else ""
+        responder_chat(chat_id, f"N\u00e3o achei transa\u00e7\u00f5es{extra} neste m\u00eas.")
+        return
+    for item in itens:
+        atual = item["categoria_nome"] or "\u2014"
+        responder_chat_botoes(
+            chat_id,
+            f'{item.get("data","")} \u00b7 "{item["estabelecimento"]}" R$ {item["valor"]:.0f}\n'
+            f'atual: {atual}',
             montar_teclado(item["id"], item["categoria_nome"], freq))
