@@ -43,52 +43,54 @@ def rodar_ciclo(hoje: datetime.date | None = None) -> dict:
 
     engine = engine_from_env(); Base.metadata.create_all(engine)
     s = criar_sessao(engine)
-
-    orcamento_aviso = None
     try:
-        sincronizar_orcamento(s, mes, criar_leitor_orcamento())
-        sincronizar_categorias(s, criar_leitor_descricoes_dre()())  # vocabulário da DRE
-    except Exception as e:  # noqa: BLE001
-        orcamento_aviso = f"sync de orçamento/categorias falhou: {e}"
+        orcamento_aviso = None
+        try:
+            sincronizar_orcamento(s, mes, criar_leitor_orcamento())
+            sincronizar_categorias(s, criar_leitor_descricoes_dre()())  # vocabulário da DRE
+        except Exception as e:  # noqa: BLE001
+            orcamento_aviso = f"sync de orçamento/categorias falhou: {e}"
 
-    fonte = BancoMcpFonte(transporte=criar_transporte(),
-                          account_id=os.environ["XP_ACCOUNT_ID_CARTAO"])
-    fallback = criar_fallback_ia(criar_cliente_ia()) if os.environ.get("LLM_API_KEY") else None
-    classificador = Classificador(s, fallback=fallback)
+        fonte = BancoMcpFonte(transporte=criar_transporte(),
+                              account_id=os.environ["XP_ACCOUNT_ID_CARTAO"])
+        fallback = criar_fallback_ia(criar_cliente_ia()) if os.environ.get("LLM_API_KEY") else None
+        classificador = Classificador(s, fallback=fallback)
 
-    resultado = executar_ciclo(
-        s, fonte, classificador, mes=mes, data=hoje.isoformat(),
-        enviar=criar_enviar(), desde=desde, ate=ate,
-        portador=portador, teto=teto, tipo="cartao", dia_fechamento=dia_fechamento,
-    )
-    if orcamento_aviso:
-        resultado["orcamento_aviso"] = orcamento_aviso
+        resultado = executar_ciclo(
+            s, fonte, classificador, mes=mes, data=hoje.isoformat(),
+            enviar=criar_enviar(), desde=desde, ate=ate,
+            portador=portador, teto=teto, tipo="cartao", dia_fechamento=dia_fechamento,
+        )
+        if orcamento_aviso:
+            resultado["orcamento_aviso"] = orcamento_aviso
 
-    # IA nos pendentes + botões (melhor esforço)
-    try:
-        reclassificar_pendentes(s, classificador, mes, limite=revisao_max)
-        enviar_botoes = criar_enviar_botoes()
-        freq = categorias_frequentes(s)
-        itens = transacoes_para_revisar(s, mes, limite=revisao_max)
-        for item in itens:
-            enviar_botoes(
-                f'{item.get("data","")} · "{item["estabelecimento"]}" R$ {item["valor"]:.0f}',
-                montar_teclado(item["id"], item["categoria_nome"], freq))
-        resultado["revisao_enviada"] = len(itens)
-    except Exception as e:  # noqa: BLE001
-        resultado["revisao_aviso"] = str(e)
+        # IA nos pendentes + botões (melhor esforço)
+        try:
+            reclassificar_pendentes(s, classificador, mes, limite=revisao_max)
+            enviar_botoes = criar_enviar_botoes()
+            freq = categorias_frequentes(s)
+            itens = transacoes_para_revisar(s, mes, limite=revisao_max)
+            for item in itens:
+                enviar_botoes(
+                    f'{item.get("data","")} · "{item["estabelecimento"]}" R$ {item["valor"]:.0f}',
+                    montar_teclado(item["id"], item["categoria_nome"], freq))
+            resultado["revisao_enviada"] = len(itens)
+        except Exception as e:  # noqa: BLE001
+            resultado["revisao_aviso"] = str(e)
 
-    # escreve a aba 'Fatura [mês]' do ciclo atual e do anterior (boundary) -> DRE se atualiza
-    try:
-        escritor_fatura = criar_escritor_fatura()
-        res_fat = {}
-        for m in (mes, _mes_anterior(mes)):
-            res_fat[m] = escritor_fatura(m, linhas_para_fatura(s, m))
-        resultado["fatura"] = res_fat
-    except Exception as e:  # noqa: BLE001
-        resultado["fatura_aviso"] = str(e)
+        # escreve a aba 'Fatura [mês]' do ciclo atual e do anterior -> DRE se atualiza
+        try:
+            escritor_fatura = criar_escritor_fatura()
+            res_fat = {}
+            for m in (mes, _mes_anterior(mes)):
+                res_fat[m] = escritor_fatura(m, linhas_para_fatura(s, m))
+            resultado["fatura"] = res_fat
+        except Exception as e:  # noqa: BLE001
+            resultado["fatura_aviso"] = str(e)
 
-    return resultado
+        return resultado
+    finally:
+        s.close(); engine.dispose()
 
 
 if __name__ == "__main__":

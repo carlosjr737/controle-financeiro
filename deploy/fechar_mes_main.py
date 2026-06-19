@@ -20,9 +20,12 @@ def rodar_fechamento(hoje: datetime.date | None = None) -> dict:
     mes = _mes_anterior(hoje)
     engine = engine_from_env(); Base.metadata.create_all(engine)
     s = criar_sessao(engine)
-    resumo = fechar_mes(s, mes, hoje=hoje.isoformat())
-    escrever_realizado(s, mes, criar_escritor_realizado())
-    return resumo
+    try:
+        resumo = fechar_mes(s, mes, hoje=hoje.isoformat())
+        escrever_realizado(s, mes, criar_escritor_realizado())
+        return resumo
+    finally:
+        s.close(); engine.dispose()
 
 
 if __name__ == "__main__":

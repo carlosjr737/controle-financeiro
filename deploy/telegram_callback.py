@@ -16,7 +16,7 @@ from deploy.telegram_envio import (responder_callback, editar_mensagem,
 
 def _sessao():
     engine = engine_from_env(); Base.metadata.create_all(engine)
-    return criar_sessao(engine)
+    return engine, criar_sessao(engine)
 
 def _mes_hoje():
     hoje = datetime.date.today()
@@ -43,29 +43,31 @@ def _tratar_callback(cq):
     if not _eh_dono(chat.get("id")):
         return
     parsed = parse_callback(cq.get("data", ""))
-    s = _sessao()
+    engine, s = _sessao()
+    try:
+        # abrir lista paginada de categorias (edita só o teclado)
+        if parsed[0] == "cat":
+            txid, page = parsed[1], parsed[2]
+            cats = [(c.id, c.nome) for c in s.query(Categoria).order_by(Categoria.nome).all()]
+            if chat.get("id") and m.get("message_id"):
+                editar_teclado(chat["id"], m["message_id"],
+                               montar_pagina_categorias(txid, cats, page))
+            responder_callback(cq["id"], "")
+            return
 
-    # abrir lista paginada de categorias (edita só o teclado)
-    if parsed[0] == "cat":
-        txid, page = parsed[1], parsed[2]
-        cats = [(c.id, c.nome) for c in s.query(Categoria).order_by(Categoria.nome).all()]
+        if parsed[0] == "ok":
+            feedback = "✅ " + confirmar_sugestao(s, parsed[1])
+            _atualizar_fatura(s, parsed[1])
+        elif parsed[0] == "set":
+            feedback = "✅ " + corrigir_por_categoria_id(s, parsed[1], parsed[2])
+            _atualizar_fatura(s, parsed[1])
+        else:
+            feedback = "ignorado"
+        responder_callback(cq["id"], feedback)
         if chat.get("id") and m.get("message_id"):
-            editar_teclado(chat["id"], m["message_id"],
-                           montar_pagina_categorias(txid, cats, page))
-        responder_callback(cq["id"], "")
-        return
-
-    if parsed[0] == "ok":
-        feedback = "✅ " + confirmar_sugestao(s, parsed[1])
-        _atualizar_fatura(s, parsed[1])
-    elif parsed[0] == "set":
-        feedback = "✅ " + corrigir_por_categoria_id(s, parsed[1], parsed[2])
-        _atualizar_fatura(s, parsed[1])
-    else:
-        feedback = "ignorado"
-    responder_callback(cq["id"], feedback)
-    if chat.get("id") and m.get("message_id"):
-        editar_mensagem(chat["id"], m["message_id"], f"{m.get('text','')}\n{feedback}")
+            editar_mensagem(chat["id"], m["message_id"], f"{m.get('text','')}\n{feedback}")
+    finally:
+        s.close(); engine.dispose()
 
 
 def _tratar_mensagem(msg):
@@ -73,26 +75,29 @@ def _tratar_mensagem(msg):
     chat_id = msg["chat"]["id"]
     if not _eh_dono(chat_id):
         return
-    s = _sessao()
-    mes, hoje = _mes_hoje()
-    teto = float(os.environ.get("TETO_MENSAL", "27060"))
-    if texto.lower().strip() == "/revisar":
-        _enviar_revisao(s, chat_id, mes)
-        return
-    if texto.lower().startswith("/corrigir"):
-        partes = texto.split(maxsplit=1)
-        termo = partes[1] if len(partes) > 1 else None
-        _enviar_correcao(s, chat_id, mes, termo)
-        return
-    if texto.startswith("/"):
-        resp = responder_comando(s, texto, mes, teto, hoje)
-    elif os.environ.get("LLM_API_KEY"):
-        from deploy.cliente_ia import criar_assistente
-        resp = criar_assistente()(texto, contexto_para_ia(s, mes))
-    else:
-        resp = ("Pra perguntas livres preciso da IA (LLM_API_KEY). Por ora use: "
-                "/resumo, /linha <categoria>, /pendentes, /ajuda.")
-    responder_chat(chat_id, resp)
+    engine, s = _sessao()
+    try:
+        mes, hoje = _mes_hoje()
+        teto = float(os.environ.get("TETO_MENSAL", "27060"))
+        if texto.lower().strip() == "/revisar":
+            _enviar_revisao(s, chat_id, mes)
+            return
+        if texto.lower().startswith("/corrigir"):
+            partes = texto.split(maxsplit=1)
+            termo = partes[1] if len(partes) > 1 else None
+            _enviar_correcao(s, chat_id, mes, termo)
+            return
+        if texto.startswith("/"):
+            resp = responder_comando(s, texto, mes, teto, hoje)
+        elif os.environ.get("LLM_API_KEY"):
+            from deploy.cliente_ia import criar_assistente
+            resp = criar_assistente()(texto, contexto_para_ia(s, mes))
+        else:
+            resp = ("Pra perguntas livres preciso da IA (LLM_API_KEY). Por ora use: "
+                    "/resumo, /linha <categoria>, /pendentes, /ajuda.")
+        responder_chat(chat_id, resp)
+    finally:
+        s.close(); engine.dispose()
 
 
 def _enviar_revisao(s, chat_id, mes):
