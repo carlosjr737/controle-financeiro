@@ -25,9 +25,9 @@ def test_ingestao_dedup_e_classifica(planilha_fake):
     resumo = ingerir(s, fonte, Classificador(s), desde="2026-05-01", ate="2026-05-31",
                      portador="Carlos")
 
-    assert resumo["recebidas"] == 3
+    assert resumo["recebidas"] == 2   # o id repetido é removido na deduplicação
     assert resumo["novas"] == 2
-    assert resumo["duplicadas"] == 1
+    assert resumo["duplicadas"] == 0
     uber = s.query(Transacao).filter_by(id_externo="t1").one()
     assert uber.status_classificacao == "sugerida" and uber.confianca == 1.0
     desconhecida = s.query(Transacao).filter_by(id_externo="tX").one()

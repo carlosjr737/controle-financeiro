@@ -6,6 +6,16 @@ def ingerir(sessao, fonte, classificador, desde: str, ate: str,
             portador: str | None = None, tipo: str | None = None,
             dia_fechamento: int | None = None) -> dict:
     raws = fonte.buscar_transacoes(desde, ate)
+    # deduplica por id_externo (a API às vezes repete na mesma resposta)
+    vistos, unicos = set(), []
+    for r in raws:
+        rid = r.get("id")
+        if rid and rid in vistos:
+            continue
+        if rid:
+            vistos.add(rid)
+        unicos.append(r)
+    raws = unicos
     novas = duplicadas = 0
     for raw in raws:
         dados = mapear_transacao(raw, portador=portador, tipo=tipo,
