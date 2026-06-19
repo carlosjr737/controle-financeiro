@@ -8,3 +8,7 @@ def eh_estorno(valor: float, classificacao: str | None) -> bool:
 def eh_transferencia_interna(estabelecimento: str, categoria: str | None) -> bool:
     cat = (categoria or "").strip().lower()
     return cat in _CATEGORIAS_TRANSFERENCIA
+
+
+def eh_pagamento_fatura(descricao: str | None) -> bool:
+    return "pagamento recebido" in (descricao or "").strip().lower()

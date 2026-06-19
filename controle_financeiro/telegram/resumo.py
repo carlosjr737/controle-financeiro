@@ -12,7 +12,7 @@ def montar_resumo_diario(sessao, mes: str, data: str, teto: float | None = None)
     # gastos do dia
     do_dia = (sessao.query(Transacao)
               .filter(Transacao.data == data,
-                      Transacao.status_classificacao != "estorno").all())
+                      Transacao.status_classificacao.notin_(["estorno", "pagamento"])).all())
     if do_dia:
         total_dia = sum(abs(t.valor) for t in do_dia)
         partes.append(f"Gastos de hoje ({len(do_dia)}): R$ {total_dia:.0f}")

@@ -21,7 +21,7 @@ def linhas_para_fatura(sessao, mes: str) -> list[dict]:
             "data": t.data or "",
             "estabelecimento": t.estabelecimento,
             "portador": t.portador or "",
-            "valor": abs(t.valor),
+            "valor": t.valor,   # com sinal: pagamento sai negativo
             "parcela": t.parcela or "",
             "classificacao": cat.nome if cat else "",
         })
