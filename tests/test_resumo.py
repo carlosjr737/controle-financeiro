@@ -18,7 +18,7 @@ def test_resumo_foca_em_estouro_e_quase():
     s.commit()
     texto = montar_resumo_diario(s, mes="2026-06", data="2026-06-13", teto=27060.0)
     assert "Resumo de 2026-06-13" in texto
-    assert "Já gasto no mês: R$ 1400" in texto
+    assert "Já gasto no mês: R$ 1740" in texto   # todos os gastos (inclui o pendente)
     assert "🔴 Estourou:" in texto and "Lazer" in texto
     assert "🟡 Quase estourando:" in texto and "Uber" in texto
     assert "Projeção" not in texto                # removida

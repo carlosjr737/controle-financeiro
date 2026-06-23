@@ -23,7 +23,11 @@ def montar_resumo_diario(sessao, mes: str, data: str, teto: float | None = None)
     else:
         partes.append("Sem gastos novos hoje.")
 
-    realizado_total = sum(l["realizado"] for l in linhas)
+    # total = TODOS os gastos do mês (não só os orçados), pra bater com a Fatura
+    todas = (sessao.query(Transacao)
+             .filter(Transacao.mes_competencia == mes,
+                     Transacao.status_classificacao.notin_(["estorno", "pagamento"])).all())
+    realizado_total = sum(abs(t.valor) for t in todas)
     teto_txt = f" (teto R$ {teto:.0f})" if teto else ""
     partes.append(f"Já gasto no mês: R$ {realizado_total:.0f}{teto_txt}")
 
