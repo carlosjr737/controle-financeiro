@@ -1,15 +1,16 @@
 from controle_financeiro.models import Transacao, Categoria
 from controle_financeiro.comparador import comparar_orcamento
 
-def montar_resumo_diario(sessao, mes: str, data: str, teto: float | None = None) -> str:
-    linhas = comparar_orcamento(sessao, mes)
+def montar_resumo_diario(sessao, mes: str, data: str, teto: float | None = None,
+                         realizado_externo: dict | None = None) -> str:
+    linhas = comparar_orcamento(sessao, mes, realizado_externo=realizado_externo)
     pendentes = (sessao.query(Transacao)
                  .filter(Transacao.mes_competencia == mes,
                          Transacao.status_classificacao == "pendente").all())
 
     partes = [f"Resumo de {data}"]
 
-    # gastos do dia
+    # gastos do dia (cartão lançado hoje)
     do_dia = (sessao.query(Transacao)
               .filter(Transacao.data == data,
                       Transacao.status_classificacao.notin_(["estorno", "pagamento"])).all())
@@ -23,11 +24,15 @@ def montar_resumo_diario(sessao, mes: str, data: str, teto: float | None = None)
     else:
         partes.append("Sem gastos novos hoje.")
 
-    # total = TODOS os gastos do mês (não só os orçados), pra bater com a Fatura
-    todas = (sessao.query(Transacao)
-             .filter(Transacao.mes_competencia == mes,
-                     Transacao.status_classificacao.notin_(["estorno", "pagamento"])).all())
-    realizado_total = sum(abs(t.valor) for t in todas)
+    # total = espelho da Fatura/DRE quando vier de fora; senão, do banco
+    if realizado_externo is not None:
+        realizado_total = sum(v for k, v in realizado_externo.items()
+                              if v > 0 and k.strip().upper() != "PGTO FATURA")
+    else:
+        todas = (sessao.query(Transacao)
+                 .filter(Transacao.mes_competencia == mes,
+                         Transacao.status_classificacao.notin_(["estorno", "pagamento"])).all())
+        realizado_total = sum(abs(t.valor) for t in todas)
     teto_txt = f" (teto R$ {teto:.0f})" if teto else ""
     partes.append(f"Já gasto no mês: R$ {realizado_total:.0f}{teto_txt}")
 

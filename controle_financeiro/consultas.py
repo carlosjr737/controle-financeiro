@@ -52,13 +52,15 @@ def contexto_para_ia(sessao, mes: str) -> str:
         partes.append(f"- {t.estabelecimento[:26]} | R$ {abs(t.valor):.0f} | {cat.nome if cat else '?'}")
     return "\n".join(partes)
 
-def responder_comando(sessao, texto: str, mes: str, teto, hoje: str) -> str:
+def responder_comando(sessao, texto: str, mes: str, teto, hoje: str,
+                      realizado_externo: dict | None = None) -> str:
     partes = texto.split(maxsplit=1)
     cmd = partes[0].lower()
     arg = partes[1] if len(partes) > 1 else ""
     if cmd in ("/resumo", "/start"):
         from controle_financeiro.telegram.resumo import montar_resumo_diario
-        return montar_resumo_diario(sessao, mes, hoje, teto=teto)
+        return montar_resumo_diario(sessao, mes, hoje, teto=teto,
+                                    realizado_externo=realizado_externo)
     if cmd == "/linha":
         if not arg:
             return "Use: /linha <categoria>. Ex.: /linha Uber"

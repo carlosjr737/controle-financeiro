@@ -88,7 +88,14 @@ def _tratar_mensagem(msg):
             _enviar_correcao(s, chat_id, mes, termo)
             return
         if texto.startswith("/"):
-            resp = responder_comando(s, texto, mes, teto, hoje)
+            realizado_externo = None
+            if texto.lower().strip() in ("/resumo", "/start"):
+                try:
+                    from deploy.sheets_adapter import criar_leitor_fatura_totais
+                    realizado_externo = criar_leitor_fatura_totais()(mes)
+                except Exception:  # noqa: BLE001
+                    pass
+            resp = responder_comando(s, texto, mes, teto, hoje, realizado_externo=realizado_externo)
         elif os.environ.get("LLM_API_KEY"):
             from deploy.cliente_ia import criar_assistente
             resp = criar_assistente()(texto, contexto_para_ia(s, mes))

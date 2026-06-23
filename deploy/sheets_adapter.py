@@ -157,3 +157,28 @@ def criar_leitor_descricoes_dre(planilha=None, aba: str = "DRE"):
                 vistos.add(n); unicos.append(n)
         return unicos
     return leitor
+
+
+def criar_leitor_fatura_totais(planilha=None):
+    """Lê a aba 'Fatura [mês]' e soma a coluna Valor (D) por Classificação (F).
+    É o mesmo que a DRE faz com SUMIF — inclui cartão + Pix (manuais)."""
+    from controle_financeiro.dre_fatura import aba_fatura
+
+    def leitor(mes: str) -> dict:
+        import gspread
+        pl = planilha or _abrir_planilha()
+        try:
+            ws = pl.worksheet(aba_fatura(mes))
+        except gspread.WorksheetNotFound:
+            return {}
+        totais = {}
+        for row in ws.get_all_values()[1:]:   # pula cabeçalho
+            if len(row) < 6:
+                continue
+            classif = (row[5] or "").strip()
+            v = _parse_num(row[3] if len(row) > 3 else None)
+            if not classif or v is None:
+                continue
+            totais[classif] = totais.get(classif, 0.0) + v
+        return totais
+    return leitor

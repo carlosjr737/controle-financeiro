@@ -1,5 +1,5 @@
-"""Ciclo diário: ingestão (competência por ciclo de fatura) -> classificação ->
-resumo no Telegram -> IA/botões -> escrita na aba 'Fatura [mês]' (DRE se atualiza)."""
+"""Ciclo diário: ingestão -> escreve a aba 'Fatura' (cartão) -> lê os totais da
+Fatura aberta (cartão + Pix manuais) -> resumo no Telegram espelhando a DRE."""
 import os
 import datetime
 
@@ -7,7 +7,8 @@ from controle_financeiro.config import engine_from_env
 from controle_financeiro.db import criar_sessao, Base
 from controle_financeiro.classificador import Classificador
 from controle_financeiro.fontes.banco_mcp import BancoMcpFonte
-from controle_financeiro.orquestrador import executar_ciclo
+from controle_financeiro.ingestao import ingerir
+from controle_financeiro.telegram.bot import enviar_resumo
 from controle_financeiro.sheets.orcamento_sync import sincronizar_orcamento, sincronizar_categorias
 from controle_financeiro.ia.fallback import criar_fallback_ia
 from controle_financeiro.competencia import competencia_fatura
@@ -20,7 +21,7 @@ from deploy.transporte_banco_mcp import criar_transporte
 from deploy.cliente_ia import criar_cliente_ia
 from deploy.telegram_envio import criar_enviar, criar_enviar_botoes
 from deploy.sheets_adapter import (criar_leitor_orcamento, criar_escritor_fatura,
-                                   criar_leitor_descricoes_dre)
+                                   criar_leitor_descricoes_dre, criar_leitor_fatura_totais)
 from deploy.runner import janela_datas
 
 
@@ -44,32 +45,55 @@ def rodar_ciclo(hoje: datetime.date | None = None) -> dict:
     engine = engine_from_env(); Base.metadata.create_all(engine)
     s = criar_sessao(engine)
     try:
-        orcamento_aviso = None
+        resultado = {}
+
+        # 1. orçamento + vocabulário da DRE
         try:
             sincronizar_orcamento(s, mes, criar_leitor_orcamento())
-            sincronizar_categorias(s, criar_leitor_descricoes_dre()() + ["PGTO FATURA"])  # vocabulário da DRE + pagamento
+            sincronizar_categorias(s, criar_leitor_descricoes_dre()() + ["PGTO FATURA"])
         except Exception as e:  # noqa: BLE001
-            orcamento_aviso = f"sync de orçamento/categorias falhou: {e}"
+            resultado["orcamento_aviso"] = f"sync falhou: {e}"
 
+        # 2. fontes + classificador
         transporte = criar_transporte()
-        fonte = BancoMcpFonte(transporte=transporte,
-                              account_id=os.environ["XP_ACCOUNT_ID_CARTAO"])
-        # contas correntes (Pix/débito) — opcional, via XP_ACCOUNT_IDS_CONTA (separadas por vírgula)
+        fonte = BancoMcpFonte(transporte=transporte, account_id=os.environ["XP_ACCOUNT_ID_CARTAO"])
         ids_conta = [x.strip() for x in os.environ.get("XP_ACCOUNT_IDS_CONTA", "").split(",") if x.strip()]
         contas_extra = [(BancoMcpFonte(transporte=transporte, account_id=a), "conta") for a in ids_conta]
         fallback = criar_fallback_ia(criar_cliente_ia()) if os.environ.get("LLM_API_KEY") else None
         classificador = Classificador(s, fallback=fallback)
 
-        resultado = executar_ciclo(
-            s, fonte, classificador, mes=mes, data=hoje.isoformat(),
-            enviar=criar_enviar(), desde=desde, ate=ate,
-            portador=portador, teto=teto, tipo="cartao", dia_fechamento=dia_fechamento,
-            contas_extra=contas_extra,
-        )
-        if orcamento_aviso:
-            resultado["orcamento_aviso"] = orcamento_aviso
+        # 3. ingestão (cartão + contas correntes, se houver)
+        resultado["ingestao"] = ingerir(s, fonte, classificador, desde, ate,
+                                        portador=portador, tipo="cartao", dia_fechamento=dia_fechamento)
+        extra = {}
+        for f, t in contas_extra:
+            extra[t] = ingerir(s, f, classificador, desde, ate,
+                               portador=portador, tipo=t, dia_fechamento=dia_fechamento)
+        if extra:
+            resultado["ingestao_extra"] = extra
 
-        # IA nos pendentes + botões (melhor esforço)
+        # 4. escreve a aba 'Fatura' (cartão) ANTES de ler os totais
+        try:
+            escritor_fatura = criar_escritor_fatura()
+            res_fat = {}
+            for m in (mes, _mes_anterior(mes)):
+                res_fat[m] = escritor_fatura(m, linhas_para_fatura(s, m))
+            resultado["fatura"] = res_fat
+        except Exception as e:  # noqa: BLE001
+            resultado["fatura_aviso"] = str(e)
+
+        # 5. lê os totais da Fatura aberta (cartão + Pix manuais) — espelho da DRE
+        realizado_externo = None
+        try:
+            realizado_externo = criar_leitor_fatura_totais()(mes)
+        except Exception as e:  # noqa: BLE001
+            resultado["totais_aviso"] = str(e)
+
+        # 6. resumo no Telegram (espelhando a DRE)
+        enviar_resumo(s, mes, hoje.isoformat(), enviar=criar_enviar(), teto=teto,
+                      realizado_externo=realizado_externo)
+
+        # 7. IA nos pendentes + botões (melhor esforço)
         try:
             reclassificar_pendentes(s, classificador, mes, limite=revisao_max)
             enviar_botoes = criar_enviar_botoes()
@@ -82,16 +106,6 @@ def rodar_ciclo(hoje: datetime.date | None = None) -> dict:
             resultado["revisao_enviada"] = len(itens)
         except Exception as e:  # noqa: BLE001
             resultado["revisao_aviso"] = str(e)
-
-        # escreve a aba 'Fatura [mês]' do ciclo atual e do anterior -> DRE se atualiza
-        try:
-            escritor_fatura = criar_escritor_fatura()
-            res_fat = {}
-            for m in (mes, _mes_anterior(mes)):
-                res_fat[m] = escritor_fatura(m, linhas_para_fatura(s, m))
-            resultado["fatura"] = res_fat
-        except Exception as e:  # noqa: BLE001
-            resultado["fatura_aviso"] = str(e)
 
         return resultado
     finally:
