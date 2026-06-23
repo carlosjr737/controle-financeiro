@@ -51,8 +51,12 @@ def rodar_ciclo(hoje: datetime.date | None = None) -> dict:
         except Exception as e:  # noqa: BLE001
             orcamento_aviso = f"sync de orçamento/categorias falhou: {e}"
 
-        fonte = BancoMcpFonte(transporte=criar_transporte(),
+        transporte = criar_transporte()
+        fonte = BancoMcpFonte(transporte=transporte,
                               account_id=os.environ["XP_ACCOUNT_ID_CARTAO"])
+        # contas correntes (Pix/débito) — opcional, via XP_ACCOUNT_IDS_CONTA (separadas por vírgula)
+        ids_conta = [x.strip() for x in os.environ.get("XP_ACCOUNT_IDS_CONTA", "").split(",") if x.strip()]
+        contas_extra = [(BancoMcpFonte(transporte=transporte, account_id=a), "conta") for a in ids_conta]
         fallback = criar_fallback_ia(criar_cliente_ia()) if os.environ.get("LLM_API_KEY") else None
         classificador = Classificador(s, fallback=fallback)
 
@@ -60,6 +64,7 @@ def rodar_ciclo(hoje: datetime.date | None = None) -> dict:
             s, fonte, classificador, mes=mes, data=hoje.isoformat(),
             enviar=criar_enviar(), desde=desde, ate=ate,
             portador=portador, teto=teto, tipo="cartao", dia_fechamento=dia_fechamento,
+            contas_extra=contas_extra,
         )
         if orcamento_aviso:
             resultado["orcamento_aviso"] = orcamento_aviso

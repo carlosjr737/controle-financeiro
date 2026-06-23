@@ -18,3 +18,10 @@ NOME_PGTO_FATURA = "PGTO FATURA"
 
 def eh_categoria_pagamento(nome: str | None) -> bool:
     return (nome or "").strip().upper() == NOME_PGTO_FATURA
+
+
+def eh_pagamento_cartao_conta(descricao: str | None) -> bool:
+    """Saída da conta corrente pra pagar o cartão (débito automático ou Pix).
+    Excluída do gasto pra não contar em dobro com as compras do cartão."""
+    d = (descricao or "").strip().lower()
+    return ("pagamento para banco xp" in d) or ("pagamento de fatura" in d)

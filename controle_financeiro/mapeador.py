@@ -8,7 +8,7 @@ def mapear_transacao(raw: dict, portador: str | None = None,
     tipo_final = tipo or ("cartao" if ccm else "conta")
 
     mes_comp = data[:7] if len(data) >= 7 else None
-    if tipo_final == "cartao" and dia_fechamento and len(data) >= 10:
+    if dia_fechamento and len(data) >= 10:
         from controle_financeiro.competencia import competencia_fatura
         mes_comp = competencia_fatura(data, dia_fechamento)
 

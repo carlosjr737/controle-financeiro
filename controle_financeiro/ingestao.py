@@ -1,7 +1,8 @@
 from controle_financeiro.mapeador import mapear_transacao
 from controle_financeiro.upsert import upsert_transacao
 from controle_financeiro.models import Categoria
-from controle_financeiro.regras_negocio import eh_pagamento_fatura, eh_categoria_pagamento
+from controle_financeiro.regras_negocio import (eh_pagamento_fatura, eh_categoria_pagamento,
+                                                eh_pagamento_cartao_conta)
 
 def _garantir_categoria(sessao, nome):
     cat = sessao.query(Categoria).filter_by(nome=nome).one_or_none()
@@ -24,6 +25,12 @@ def ingerir(sessao, fonte, classificador, desde: str, ate: str,
     raws = unicos
     novas = duplicadas = 0
     for raw in raws:
+        # conta corrente: só saídas (débito); ignora entradas e pagamento do cartão
+        if tipo == "conta":
+            if (raw.get("type") or "").upper() == "CREDIT":
+                continue
+            if eh_pagamento_cartao_conta(raw.get("description")):
+                continue
         dados = mapear_transacao(raw, portador=portador, tipo=tipo,
                                  dia_fechamento=dia_fechamento)
         t, criada = upsert_transacao(sessao, dados)
