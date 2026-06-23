@@ -3,10 +3,10 @@ from controle_financeiro.models import Orcamento, Categoria, Transacao
 
 def _status(pct: float) -> str:
     if pct > 1.0:
-        return "vermelho"
-    if pct >= 0.8:
-        return "amarelo"
-    return "verde"
+        return "vermelho"          # estourou (acima da meta)
+    if 0.8 <= pct < 0.99:
+        return "amarelo"           # quase: variável chegando perto (exclui fixos ~100%)
+    return "verde"                 # dentro/no orçamento (inclui fixos exatamente na meta)
 
 def comparar_orcamento(sessao, mes: str, realizado_externo: dict | None = None) -> list[dict]:
     resultado = []
