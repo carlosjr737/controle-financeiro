@@ -1,12 +1,17 @@
 # controle_financeiro/comparador.py
 from controle_financeiro.models import Orcamento, Categoria, Transacao
 
-def _status(pct: float) -> str:
-    if pct > 1.0:
-        return "vermelho"          # estourou (acima da meta)
+TOLERANCIA_RS = 1.0   # ignora "estouros" de centavos (arredondamento da meta)
+
+def _status(realizado: float, meta: float) -> str:
+    if meta <= 0:
+        return "verde"                          # sem meta definida -> não alerta
+    if realizado - meta > TOLERANCIA_RS:
+        return "vermelho"                        # estourou de fato (> R$1 acima)
+    pct = realizado / meta
     if 0.8 <= pct < 0.99:
-        return "amarelo"           # quase: variável chegando perto (exclui fixos ~100%)
-    return "verde"                 # dentro/no orçamento (inclui fixos exatamente na meta)
+        return "amarelo"                         # quase: variável chegando perto
+    return "verde"                               # dentro/no orçamento (inclui fixos ~100%)
 
 def comparar_orcamento(sessao, mes: str, realizado_externo: dict | None = None) -> list[dict]:
     resultado = []
@@ -25,7 +30,8 @@ def comparar_orcamento(sessao, mes: str, realizado_externo: dict | None = None) 
                 realizado = sum(abs(t.valor) for t in q)
         pct = (realizado / meta) if meta else 0.0
         resultado.append({"grupo": orc.grupo, "linha": orc.linha, "meta": meta,
-                          "realizado": realizado, "pct": pct, "status": _status(pct),
+                          "realizado": realizado, "pct": pct,
+                          "status": _status(realizado, meta),
                           "observacao": orc.observacao})
     return resultado
 
