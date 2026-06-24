@@ -91,7 +91,11 @@ def _tratar_mensagem(msg):
             realizado_externo = None
             if texto.lower().strip() in ("/resumo", "/start"):
                 try:
-                    from deploy.sheets_adapter import criar_leitor_fatura_totais
+                    from deploy.sheets_adapter import (criar_leitor_fatura_totais,
+                                                       criar_leitor_orcamento)
+                    from controle_financeiro.sheets.orcamento_sync import sincronizar_orcamento
+                    # metas frescas da planilha (reflete edições na hora)
+                    sincronizar_orcamento(s, mes, criar_leitor_orcamento())
                     realizado_externo = criar_leitor_fatura_totais()(mes)
                 except Exception:  # noqa: BLE001
                     pass
