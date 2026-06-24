@@ -86,6 +86,59 @@ def criar_leitor_orcamento(planilha=None, aba: str = "Orçamentos"):
     return leitor
 
 
+def criar_escritor_orcamento(planilha=None, aba: str = "Orçamentos"):
+    """(Re)escreve a aba de orçamento num layout limpo e fácil de editar:
+        Grupo | Linha | <rótulo de referência> | 🎯 Meta a perseguir
+    A coluna de meta é a ÚNICA que o usuário edita; o leitor a reconhece por
+    conter 'meta' no título. A referência é só pra orientar (o leitor a ignora)."""
+    def escritor(linhas: list, ref_label: str) -> int:
+        import gspread
+        pl = planilha or _abrir_planilha()
+        try:
+            ws = pl.worksheet(aba)
+            ws.clear()
+        except gspread.WorksheetNotFound:
+            ws = pl.add_worksheet(title=aba, rows=200, cols=26)
+        dados = [["Grupo", "Linha", ref_label, "🎯 Meta a perseguir"]]
+        for ln in linhas:
+            dados.append([ln.get("grupo") or "", ln["linha"],
+                          ln.get("referencia") or 0, ln.get("meta") or 0])
+        ws.append_rows(dados, value_input_option="USER_ENTERED")
+        return len(linhas)
+    return escritor
+
+
+def criar_anexar_coluna_mes(planilha=None, aba: str = "Orçamentos"):
+    """Adiciona (ou atualiza) uma coluna com o realizado de um mês na aba de
+    orçamento, casando por 'Linha'. Idempotente: se já houver uma coluna com o
+    mesmo rótulo, sobrescreve os valores em vez de criar outra."""
+    def anexar(mes_label: str, valores_por_linha: dict) -> int:
+        pl = planilha or _abrir_planilha()
+        ws = pl.worksheet(aba)
+        valores = ws.get_all_values()
+        header_idx = next((i for i, r in enumerate(valores)
+                           if any(_norm(c) == "linha" for c in r)), None)
+        if header_idx is None:
+            return 0
+        header = valores[header_idx]
+        col_linha = next(j for j, c in enumerate(header) if _norm(c) == "linha")
+        col_mes = next((j for j, c in enumerate(header)
+                        if _norm(c) == _norm(mes_label)), None)
+        if col_mes is None:
+            col_mes = max(len(r) for r in valores)   # 1ª coluna livre (0-based)
+        ws.update_cell(header_idx + 1, col_mes + 1, mes_label)
+        n = 0
+        for i in range(header_idx + 1, len(valores)):
+            linha = valores[i]
+            nome = (linha[col_linha].strip() if col_linha < len(linha) else "")
+            if not nome or nome not in valores_por_linha:
+                continue
+            ws.update_cell(i + 1, col_mes + 1, round(abs(valores_por_linha[nome])))
+            n += 1
+        return n
+    return anexar
+
+
 def criar_escritor_realizado(planilha=None):
     def escritor(aba: str, linhas: list) -> int:
         import gspread
