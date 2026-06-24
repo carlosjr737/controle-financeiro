@@ -9,7 +9,7 @@ def _status(realizado: float, meta: float) -> str:
     if realizado - meta > TOLERANCIA_RS:
         return "vermelho"                        # estourou de fato (> R$1 acima)
     pct = realizado / meta
-    if 0.8 <= pct < 0.99:
+    if 0.7 <= pct < 0.99:
         return "amarelo"                         # quase: variável chegando perto
     return "verde"                               # dentro/no orçamento (inclui fixos ~100%)
 
