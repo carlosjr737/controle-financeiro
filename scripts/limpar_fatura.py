@@ -74,9 +74,16 @@ def _relatorio(titulo, alvo):
 
 
 def _apagar(ws, alvo):
-    # apaga de baixo pra cima pra não bagunçar os índices
-    for rownum, *_ in sorted(alvo, key=lambda x: -x[0]):
-        ws.delete_rows(rownum)
+    # exclusão em LOTE: uma única chamada à API (sem travar no limite de escritas).
+    # Ordena de baixo pra cima pra os índices não se deslocarem dentro do lote.
+    requests = [{
+        "deleteDimension": {
+            "range": {"sheetId": ws.id, "dimension": "ROWS",
+                      "startIndex": rownum - 1, "endIndex": rownum}
+        }
+    } for rownum, *_ in sorted(alvo, key=lambda x: -x[0])]
+    if requests:
+        ws.spreadsheet.batch_update({"requests": requests})
 
 
 def main(apply: bool):
