@@ -11,6 +11,14 @@ CAMINHOS = [
     "/credit_card_bills", "/bills",
 ]
 
+# caminhos prováveis pra FATURA ATUAL (aberta, ainda não fechada)
+CAMINHOS_ABERTA = [
+    "/credit-card-bills/current", "/credit-card-bill/current",
+    "/credit-card-bills/open", "/credit-card-bill/summary",
+    "/credit-card-bills/summary", "/credit-card-bill/get",
+    "/current-credit-card-bill/get", "/credit-card-bills/get",
+]
+
 
 def _resumir(resp):
     """Estrutura da resposta (sem despejar tudo): chaves + 1º item de cada lista."""
@@ -25,38 +33,52 @@ def _resumir(resp):
     return amostra(resp)
 
 
+def _faturas_de(resp):
+    """Extrai [{dueDate,totalAmount,payment_status}] de uma resposta de faturas."""
+    result = resp.get("result") or {}
+    bruto = result.get("results")
+    if isinstance(bruto, dict):              # caso seja 1 fatura só (objeto)
+        bruto = [bruto]
+    if not isinstance(bruto, list):
+        return _resumir(resp)
+    return [{"dueDate": (b.get("dueDate") or "")[:10],
+             "totalAmount": b.get("totalAmount"),
+             "payment_status": b.get("payment_status")} for b in bruto]
+
+
 def probar_fatura() -> dict:
     transporte = criar_transporte()
     acc = os.environ.get("XP_ACCOUNT_ID_CARTAO")
     dia = int(os.environ.get("DIA_FECHAMENTO", "6"))
-    corpos = [
-        {"account_id": acc, "closing_day": dia},
-        {"account_id": acc, "closingDay": dia},
-        {"account_id": acc},
-        {"accountId": acc, "closingDay": dia},
-        {},
+    base = {"account_id": acc, "closing_day": dia}
+
+    # 1) endpoint que funciona, com variações de parâmetro p/ tentar trazer a aberta
+    variacoes = [
+        base,
+        {**base, "status": "OPEN"},
+        {**base, "include_open": True},
+        {**base, "open": True},
+        {**base, "current": True},
+        {**base, "include_current": True},
+        {**base, "include_open_bill": True},
     ]
-    tentativas = []
-    for caminho in CAMINHOS:
-        for corpo in corpos:
-            try:
-                resp = transporte(caminho, corpo)
-                result = resp.get("result") or {}
-                bruto = result.get("results")
-                faturas = []
-                if isinstance(bruto, list):
-                    for b in bruto:
-                        faturas.append({
-                            "dueDate": (b.get("dueDate") or "")[:10],
-                            "totalAmount": b.get("totalAmount"),
-                            "payment_status": b.get("payment_status"),
-                        })
-                return {"ok": True, "endpoint": caminho, "corpo": list(corpo.keys()),
-                        "faturas": faturas or _resumir(resp)}
-            except Exception as e:  # noqa: BLE001
-                msg = str(e)
-                tentativas.append({"endpoint": caminho,
-                                   "corpo": list(corpo.keys()), "erro": msg[:140]})
-                if "404" in msg or "405" in msg:
-                    break   # caminho não existe -> próximo caminho
-    return {"ok": False, "tentativas": tentativas[-24:]}
+    lista = []
+    for corpo in variacoes:
+        try:
+            resp = transporte("/credit-card-bills/list", corpo)
+            lista.append({"corpo": list(corpo.keys()), "faturas": _faturas_de(resp)})
+        except Exception as e:  # noqa: BLE001
+            lista.append({"corpo": list(corpo.keys()), "erro": str(e)[:120]})
+
+    # 2) caminhos candidatos pra fatura ATUAL (aberta)
+    abertos = []
+    for caminho in CAMINHOS_ABERTA:
+        try:
+            resp = transporte(caminho, base)
+            abertos.append({"endpoint": caminho, "resposta": _resumir(resp)})
+        except Exception as e:  # noqa: BLE001
+            msg = str(e)
+            if "404" not in msg and "405" not in msg:   # só registra caminhos que existem
+                abertos.append({"endpoint": caminho, "erro": msg[:120]})
+
+    return {"ok": True, "lista_variacoes": lista, "caminhos_aberta": abertos or "todos 404"}
