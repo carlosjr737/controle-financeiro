@@ -94,8 +94,14 @@ def rodar_ciclo(hoje: datetime.date | None = None) -> dict:
             escritor_fatura = criar_escritor_fatura()
             res_fat = {}
             for m in (mes, _mes_anterior(mes)):
-                res_fat[m] = escritor_fatura(m, linhas_para_fatura(s, m))
+                linhas_m = linhas_para_fatura(s, m)
+                res_fat[m] = escritor_fatura(m, linhas_m)
             resultado["fatura"] = res_fat
+            # diagnóstico: total do CARTÃO da fatura aberta (compare com o app)
+            linhas_aberta = linhas_para_fatura(s, mes)
+            gastos = [l["valor"] for l in linhas_aberta if l["valor"] > 0]
+            resultado["cartao_fatura_aberta"] = {
+                "mes": mes, "lancamentos": len(gastos), "total": round(sum(gastos), 2)}
         except Exception as e:  # noqa: BLE001
             resultado["fatura_aviso"] = str(e)
 
