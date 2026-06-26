@@ -34,9 +34,10 @@ def montar_resumo_diario(sessao, mes: str, data: str, teto: float | None = None,
                  .filter(Transacao.mes_competencia == mes,
                          Transacao.status_classificacao.notin_(["estorno", "pagamento"])).all())
         realizado_total = sum(abs(t.valor) for t in todas)
-    # encargos/parcelas/IOF do cartão (não aparecem como compra no extrato)
-    encargos = (fatura_cartao or {}).get("encargos", 0.0) or 0.0
-    realizado_total += encargos
+    # parcelas já contratadas que ainda vão cair na fatura (postam no fechamento);
+    # no mês fechado, é a diferença pro valor oficial do banco
+    parcelas = (fatura_cartao or {}).get("parcelas", 0.0) or 0.0
+    realizado_total += parcelas
     teto_txt = f" (teto R$ {teto:.0f})" if teto else ""
     partes.append(f"Já gasto no mês: R$ {realizado_total:.0f}{teto_txt}")
 
@@ -45,9 +46,9 @@ def montar_resumo_diario(sessao, mes: str, data: str, teto: float | None = None,
             partes.append(f"💳 Fatura cartão (oficial do banco): R$ {fatura_cartao['total']:.0f}")
         else:
             partes.append(
-                f"💳 Fatura cartão (estimada): R$ {fatura_cartao['total']:.0f} "
+                f"💳 Fatura cartão (parcial): R$ {fatura_cartao['total']:.0f} "
                 f"— compras R$ {fatura_cartao['compras']:.0f} + "
-                f"encargos/parcelas ~R$ {encargos:.0f}")
+                f"parcelas a vencer R$ {parcelas:.0f}")
 
     # FOCO: o que estourou e o que está quase
     estourou = sorted([l for l in linhas if l["status"] == "vermelho"],

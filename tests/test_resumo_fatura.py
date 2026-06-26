@@ -12,20 +12,20 @@ def _sessao():
     return s
 
 
-def test_resumo_aberto_soma_encargos_e_mostra_estimada():
+def test_resumo_aberto_soma_parcelas_e_mostra_parcial():
     s = _sessao()
     externo = {"Lazer": 4273.0}                       # Pix/compras na aba Fatura
-    fc = {"total": 20715.0, "compras": 17043.0, "encargos": 3672.0,
-          "oficial": False, "comp_ref": "2026-06"}
+    fc = {"total": 20715.0, "compras": 17043.0, "parcelas": 3672.0,
+          "oficial": False, "comp_ref": None}
     txt = montar_resumo_diario(s, "2026-07", "2026-06-24",
                                teto=27060.0, realizado_externo=externo, fatura_cartao=fc)
-    assert "Já gasto no mês: R$ 7945" in txt          # 4273 + 3672 encargos
-    assert "💳 Fatura cartão (estimada): R$ 20715" in txt
+    assert "Já gasto no mês: R$ 7945" in txt          # 4273 + 3672 parcelas
+    assert "💳 Fatura cartão (parcial): R$ 20715" in txt
 
 
 def test_resumo_fechado_mostra_oficial():
     s = _sessao()
-    fc = {"total": 21380.0, "compras": 17700.0, "encargos": 3680.0,
+    fc = {"total": 21380.0, "compras": 17700.0, "parcelas": 3680.0,
           "oficial": True, "comp_ref": "2026-07"}
     txt = montar_resumo_diario(s, "2026-07", "2026-07-10",
                                teto=27060.0, realizado_externo={"Lazer": 100.0},

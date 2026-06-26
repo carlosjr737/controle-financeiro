@@ -46,16 +46,16 @@ def contexto_para_ia(sessao, mes: str, realizado_externo: dict | None = None,
               "Orçamento (gasto / meta):"]
     for l in linhas:
         partes.append(f"- {l['linha']}: R$ {l['realizado']:.0f} / R$ {l['meta']:.0f}")
-    encargos = (fatura_cartao or {}).get("encargos", 0.0) or 0.0
+    parcelas = (fatura_cartao or {}).get("parcelas", 0.0) or 0.0
     total = sum(l["realizado"] for l in linhas
-                if (l["linha"] or "").strip().upper() != "PGTO FATURA") + encargos
+                if (l["linha"] or "").strip().upper() != "PGTO FATURA") + parcelas
     partes.append(f"Total gasto no mês (cartão + Pix): R$ {total:.0f}")
     if fatura_cartao and fatura_cartao.get("total"):
-        tag = "oficial do banco" if fatura_cartao.get("oficial") else "estimada (fatura ainda aberta)"
+        tag = "oficial do banco" if fatura_cartao.get("oficial") else "parcial (fatura ainda aberta)"
         partes.append(
             f"Fatura do cartão ({tag}): R$ {fatura_cartao['total']:.0f} "
-            f"(compras R$ {fatura_cartao['compras']:.0f} + encargos/parcelas/IOF "
-            f"R$ {encargos:.0f}). Use este valor pra 'quanto gastei no cartão'.")
+            f"(compras R$ {fatura_cartao['compras']:.0f} + parcelas a vencer "
+            f"R$ {parcelas:.0f}). Use este valor pra 'quanto gastei no cartão'.")
     txs = (sessao.query(Transacao)
            .filter(Transacao.mes_competencia == mes,
                    Transacao.status_classificacao != "estorno")

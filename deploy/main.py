@@ -17,6 +17,7 @@ from controle_financeiro.revisao import (reclassificar_pendentes,
 from controle_financeiro.telegram.botoes import montar_teclado
 from controle_financeiro.dre_fatura import linhas_para_fatura
 from controle_financeiro.reconciliacao import reconciliar_cartao
+from controle_financeiro.parcelas import projecao_parcelas
 
 from deploy.transporte_banco_mcp import criar_transporte
 from deploy.cliente_ia import criar_cliente_ia
@@ -113,14 +114,15 @@ def rodar_ciclo(hoje: datetime.date | None = None) -> dict:
         except Exception as e:  # noqa: BLE001
             resultado["totais_aviso"] = str(e)
 
-        # 5b. reconcilia o cartão com a fatura OFICIAL do banco (híbrido)
+        # 5b. reconcilia o cartão: mês fechado = oficial; aberto = compras + parcelas projetadas
         fatura_cartao = None
         try:
             faturas = fonte.buscar_faturas(dia_fechamento)
             def _compras(m):
                 return sum(l["valor"] for l in linhas_para_fatura(s, m) if l["valor"] > 0)
             cap = {mes: _compras(mes), _mes_anterior(mes): _compras(_mes_anterior(mes))}
-            fatura_cartao = reconciliar_cartao(mes, cap, faturas)
+            proj = projecao_parcelas(s, mes, _mes_anterior(mes))
+            fatura_cartao = reconciliar_cartao(mes, cap, faturas, projecao_parcelas=proj)
             resultado["fatura_cartao"] = fatura_cartao
         except Exception as e:  # noqa: BLE001
             resultado["fatura_cartao_aviso"] = str(e)

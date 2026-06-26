@@ -46,7 +46,7 @@ def _fatura_cartao(s, mes):
         from controle_financeiro.fontes.banco_mcp import BancoMcpFonte
         from controle_financeiro.dre_fatura import linhas_para_fatura
         from controle_financeiro.reconciliacao import reconciliar_cartao
-        from controle_financeiro.competencia import competencia_fatura  # noqa: F401
+        from controle_financeiro.parcelas import projecao_parcelas
         from deploy.transporte_banco_mcp import criar_transporte
         dia = int(os.environ.get("DIA_FECHAMENTO", "6"))
         fonte = BancoMcpFonte(transporte=criar_transporte(),
@@ -58,7 +58,8 @@ def _fatura_cartao(s, mes):
         prev = f"{ano:04d}-{m:02d}"
         compras = {x: sum(l["valor"] for l in linhas_para_fatura(s, x) if l["valor"] > 0)
                    for x in (mes, prev)}
-        return reconciliar_cartao(mes, compras, faturas)
+        proj = projecao_parcelas(s, mes, prev)
+        return reconciliar_cartao(mes, compras, faturas, projecao_parcelas=proj)
     except Exception:  # noqa: BLE001
         return None
 
