@@ -85,9 +85,21 @@ def main(apply, fazer_backup):
     print(f"### Conversão Jun/Jul p/ 'mês do gasto' — {'APLICANDO' if apply else 'SIMULAÇÃO'} ###")
     pl = _abrir_planilha()
 
-    # coleta linhas das fontes
+    # coleta linhas das fontes; OF deduplicado por of_id (col H) — a mesma compra
+    # pode estar em 2 abas (Jun e Jul) por causa da migração.
     dados = {t: _ler(pl, t) for t in FONTES}
-    todas_of = [r for _, linhas in dados.values() for r in linhas if _eh_of(r)]
+    todas_of = []
+    vistos_of = set()
+    for _, linhas in dados.values():
+        for r in linhas:
+            if not _eh_of(r):
+                continue
+            ofid = str(r[7]).strip() if len(r) > 7 else ""
+            chave = ofid or f"{r[0]}|{r[1]}|{r[3]}"     # fallback se não tiver id
+            if chave in vistos_of:
+                continue
+            vistos_of.add(chave)
+            todas_of.append(r)
 
     if fazer_backup:
         print("\n[backup]")
