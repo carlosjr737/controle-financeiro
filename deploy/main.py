@@ -46,15 +46,15 @@ def inicio_ciclo_fatura(mes: str, dia_fechamento: int, margem_dias: int = 0) -> 
 
 def rodar_ciclo(hoje: datetime.date | None = None) -> dict:
     hoje = hoje or datetime.date.today()
-    dia_fechamento = int(os.environ.get("DIA_FECHAMENTO", "6"))
-    mes = hoje.isoformat()[:7]                      # MÊS DO GASTO (calendário)
+    dia_fechamento = int(os.environ.get("DIA_FECHAMENTO", "7"))   # fatura fecha dia 7
+    mes = competencia_fatura(hoje.isoformat(), dia_fechamento)    # fatura aberta agora
     teto = float(os.environ.get("TETO_MENSAL", "27060"))
     portador = os.environ.get("PORTADOR", "Carlos")
     revisao_max = int(os.environ.get("REVISAO_MAX", "12"))
     page_size = int(os.environ.get("PAGE_SIZE", "500"))
-    # janela = do 1º dia do mês ANTERIOR até hoje (cobre o mês corrente + lançamentos
-    # que postam atrasados). Dedup por id garante que re-puxar é seguro.
-    desde = (hoje.replace(day=1) - datetime.timedelta(days=1)).replace(day=1).isoformat()
+    # janela = ciclo da fatura aberta (do fechamento anterior até hoje).
+    margem = int(os.environ.get("BACKFILL_DIAS", "0"))
+    desde = inicio_ciclo_fatura(mes, dia_fechamento, margem).isoformat()
     ate = hoje.isoformat()
 
     engine = engine_from_env(); Base.metadata.create_all(engine)
@@ -62,13 +62,16 @@ def rodar_ciclo(hoje: datetime.date | None = None) -> dict:
     try:
         resultado = {}
 
-        # 0. realinha competência das transações p/ 'mês do gasto' (idempotente)
+        # 0. realinha competência das transações p/ a fatura do banco (idempotente)
         try:
             from controle_financeiro.models import Transacao
+            from controle_financeiro.competencia import competencia_fatura as _cf
             n = 0
             for t in s.query(Transacao).all():
-                if t.data and len(t.data) >= 7 and t.mes_competencia != t.data[:7]:
-                    t.mes_competencia = t.data[:7]; n += 1
+                if t.data and len(t.data) >= 10:
+                    alvo = _cf(t.data, dia_fechamento)
+                    if t.mes_competencia != alvo:
+                        t.mes_competencia = alvo; n += 1
             if n:
                 s.commit()
             resultado["recompetencia"] = n
@@ -122,9 +125,19 @@ def rodar_ciclo(hoje: datetime.date | None = None) -> dict:
         except Exception as e:  # noqa: BLE001
             resultado["totais_aviso"] = str(e)
 
-        # 5b. 'mês do gasto': o total do mês já é o realizado da aba (cartão + Pix);
-        # sem reconciliação de fatura do banco (que é por ciclo, não por mês).
+        # 5b. reconcilia o cartão com a fatura OFICIAL do banco (mês fechado = exato;
+        # aberto = compras + parcelas projetadas).
         fatura_cartao = None
+        try:
+            faturas = fonte.buscar_faturas(dia_fechamento)
+            def _compras(m):
+                return sum(l["valor"] for l in linhas_para_fatura(s, m) if l["valor"] > 0)
+            cap = {mes: _compras(mes), _mes_anterior(mes): _compras(_mes_anterior(mes))}
+            proj = projecao_parcelas(s, mes, _mes_anterior(mes))
+            fatura_cartao = reconciliar_cartao(mes, cap, faturas, projecao_parcelas=proj)
+            resultado["fatura_cartao"] = fatura_cartao
+        except Exception as e:  # noqa: BLE001
+            resultado["fatura_cartao_aviso"] = str(e)
 
         # 6. resumo no Telegram (espelhando a DRE)
         enviar_resumo(s, mes, hoje.isoformat(), enviar=criar_enviar(), teto=teto,

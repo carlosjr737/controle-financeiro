@@ -20,7 +20,8 @@ def _sessao():
 
 def _mes_hoje():
     hoje = datetime.date.today()
-    return hoje.isoformat()[:7], hoje.isoformat()   # mês do gasto (calendário)
+    dia = int(os.environ.get("DIA_FECHAMENTO", "7"))
+    return competencia_fatura(hoje.isoformat(), dia), hoje.isoformat()
 
 def _eh_dono(chat_id) -> bool:
     dono = os.environ.get("TELEGRAM_CHAT_ID")
@@ -47,7 +48,7 @@ def _fatura_cartao(s, mes):
         from controle_financeiro.reconciliacao import reconciliar_cartao
         from controle_financeiro.parcelas import projecao_parcelas
         from deploy.transporte_banco_mcp import criar_transporte
-        dia = int(os.environ.get("DIA_FECHAMENTO", "6"))
+        dia = int(os.environ.get("DIA_FECHAMENTO", "7"))
         fonte = BancoMcpFonte(transporte=criar_transporte(),
                               account_id=os.environ["XP_ACCOUNT_ID_CARTAO"])
         faturas = fonte.buscar_faturas(dia)
@@ -125,7 +126,7 @@ def _tratar_mensagem(msg):
         # FONTE ÚNICA: lê os totais da aba Fatura (cartão + Pix) e sincroniza as
         # metas da planilha — vale para comandos E perguntas livres (IA).
         realizado_externo = _totais_fatura(s, mes)
-        fatura_cartao = None       # 'mês do gasto': sem reconciliação de fatura do banco
+        fatura_cartao = _fatura_cartao(s, mes)
 
         if texto.startswith("/"):
             resp = responder_comando(s, texto, mes, teto, hoje,
