@@ -7,12 +7,9 @@ def mapear_transacao(raw: dict, portador: str | None = None,
         parcela = f"{ccm.get('installmentNumber')} de {ccm.get('totalInstallments')}"
     tipo_final = tipo or ("cartao" if ccm else "conta")
 
-    # competência = fatura do banco (mês que paga): compra depois do fechamento
-    # cai na fatura do mês seguinte. Ex.: 10/jun, fecha dia 7 -> fatura de julho.
+    # DRE = Regime de Competência: o custo entra no MÊS DO FATO GERADOR (a compra),
+    # independente da data de pagamento. -> mês calendário da data da transação.
     mes_comp = data[:7] if len(data) >= 7 else None
-    if dia_fechamento and len(data) >= 10:
-        from controle_financeiro.competencia import competencia_fatura
-        mes_comp = competencia_fatura(data, dia_fechamento)
 
     return {
         "id_externo": raw.get("id"),

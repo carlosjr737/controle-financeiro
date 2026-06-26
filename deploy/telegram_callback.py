@@ -20,8 +20,7 @@ def _sessao():
 
 def _mes_hoje():
     hoje = datetime.date.today()
-    dia = int(os.environ.get("DIA_FECHAMENTO", "7"))
-    return competencia_fatura(hoje.isoformat(), dia), hoje.isoformat()
+    return hoje.isoformat()[:7], hoje.isoformat()   # DRE = competência (mês do gasto)
 
 def _eh_dono(chat_id) -> bool:
     dono = os.environ.get("TELEGRAM_CHAT_ID")
@@ -126,7 +125,7 @@ def _tratar_mensagem(msg):
         # FONTE ÚNICA: lê os totais da aba Fatura (cartão + Pix) e sincroniza as
         # metas da planilha — vale para comandos E perguntas livres (IA).
         realizado_externo = _totais_fatura(s, mes)
-        fatura_cartao = _fatura_cartao(s, mes)
+        fatura_cartao = None       # DRE = competência: total da aba já é o do mês
 
         if texto.startswith("/"):
             resp = responder_comando(s, texto, mes, teto, hoje,
