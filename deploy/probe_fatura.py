@@ -1,9 +1,57 @@
 """Probe temporário: descobre o endpoint REST de FATURA do Banco MCP e a forma
-da resposta. Protegido pelo CRON_SECRET (chamado só via GET ?probe=fatura).
+da resposta. Protegido pelo CRON_SECRET (chamado só via header X-Probe).
 Remover depois que a integração da fatura estiver pronta."""
 import os
+import datetime
 
 from deploy.transporte_banco_mcp import criar_transporte
+
+
+def probar_parcelas() -> dict:
+    """Olha as transações reais pra entender como o banco representa parcelas:
+    transação separada por mês ou compra única com 'k/n'? amount = parcela ou total?"""
+    from controle_financeiro.fontes.banco_mcp import BancoMcpFonte
+    fonte = BancoMcpFonte(transporte=criar_transporte(),
+                          account_id=os.environ["XP_ACCOUNT_ID_CARTAO"], page_size=500)
+    hoje = datetime.date.today()
+    desde = (hoje - datetime.timedelta(days=45)).isoformat()
+    raws = fonte.buscar_transacoes(desde, hoje.isoformat())
+    parceladas, chaves = [], set()
+    com_meta = 0
+    for r in raws:
+        ccm = r.get("creditCardMetadata") or {}
+        if ccm:
+            com_meta += 1
+            chaves.update(ccm.keys())
+        ti = ccm.get("totalInstallments")
+        try:
+            tin = int(ti) if ti is not None else 0
+        except (TypeError, ValueError):
+            tin = 0
+        if tin > 1:
+            parceladas.append({
+                "desc": (r.get("description") or "")[:28],
+                "amount": r.get("amount"),
+                "date": str(r.get("date"))[:10],
+                "n": ccm.get("installmentNumber"),
+                "total": ti,
+                "ccm": {k: ccm.get(k) for k in list(ccm.keys())[:12]},
+            })
+    soma = 0.0
+    for p in parceladas:
+        try:
+            soma += float(p["amount"])
+        except (TypeError, ValueError):
+            pass
+    return {
+        "janela": [desde, hoje.isoformat()],
+        "total_transacoes": len(raws),
+        "com_creditCardMetadata": com_meta,
+        "chaves_creditCardMetadata": sorted(chaves),
+        "qtd_parceladas": len(parceladas),
+        "soma_amount_parceladas": round(soma, 2),
+        "amostra": parceladas[:15],
+    }
 
 CAMINHOS = [
     "/credit_card_bills/list", "/credit-card-bills/list", "/creditCardBills/list",
