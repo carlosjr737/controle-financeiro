@@ -22,7 +22,6 @@ from deploy.cliente_ia import criar_cliente_ia
 from deploy.telegram_envio import criar_enviar, criar_enviar_botoes
 from deploy.sheets_adapter import (criar_leitor_orcamento, criar_escritor_fatura,
                                    criar_leitor_descricoes_dre, criar_leitor_fatura_totais)
-from deploy.runner import janela_datas
 
 
 def _mes_anterior(mes: str) -> str:
@@ -38,9 +37,15 @@ def rodar_ciclo(hoje: datetime.date | None = None) -> dict:
     mes = competencia_fatura(hoje.isoformat(), dia_fechamento)   # fatura aberta agora
     teto = float(os.environ.get("TETO_MENSAL", "27060"))
     portador = os.environ.get("PORTADOR", "Carlos")
-    janela_dias = int(os.environ.get("JANELA_DIAS", "7"))
     revisao_max = int(os.environ.get("REVISAO_MAX", "12"))
-    desde, ate = janela_datas(hoje, janela_dias)
+    page_size = int(os.environ.get("PAGE_SIZE", "500"))
+    # janela cobre a fatura aberta INTEIRA (e a anterior): 1º dia de 2 meses atrás.
+    # Dedup por id garante que re-puxar é seguro.
+    ini_ano, ini_m = hoje.year, hoje.month - 2
+    while ini_m <= 0:
+        ini_m += 12; ini_ano -= 1
+    desde = datetime.date(ini_ano, ini_m, 1).isoformat()
+    ate = hoje.isoformat()
 
     engine = engine_from_env(); Base.metadata.create_all(engine)
     s = criar_sessao(engine)
@@ -56,9 +61,11 @@ def rodar_ciclo(hoje: datetime.date | None = None) -> dict:
 
         # 2. fontes + classificador
         transporte = criar_transporte()
-        fonte = BancoMcpFonte(transporte=transporte, account_id=os.environ["XP_ACCOUNT_ID_CARTAO"])
+        fonte = BancoMcpFonte(transporte=transporte,
+                              account_id=os.environ["XP_ACCOUNT_ID_CARTAO"], page_size=page_size)
         ids_conta = [x.strip() for x in os.environ.get("XP_ACCOUNT_IDS_CONTA", "").split(",") if x.strip()]
-        contas_extra = [(BancoMcpFonte(transporte=transporte, account_id=a), "conta") for a in ids_conta]
+        contas_extra = [(BancoMcpFonte(transporte=transporte, account_id=a, page_size=page_size), "conta")
+                        for a in ids_conta]
         fallback = criar_fallback_ia(criar_cliente_ia()) if os.environ.get("LLM_API_KEY") else None
         classificador = Classificador(s, fallback=fallback)
 

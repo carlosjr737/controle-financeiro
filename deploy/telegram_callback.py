@@ -28,6 +28,18 @@ def _eh_dono(chat_id) -> bool:
     return dono is None or str(chat_id) == str(dono)
 
 
+def _totais_fatura(s, mes):
+    """Sincroniza as metas da planilha e devolve os totais da aba Fatura
+    (cartão + Pix por categoria) — a fonte única de verdade. None se falhar."""
+    try:
+        from deploy.sheets_adapter import criar_leitor_fatura_totais, criar_leitor_orcamento
+        from controle_financeiro.sheets.orcamento_sync import sincronizar_orcamento
+        sincronizar_orcamento(s, mes, criar_leitor_orcamento())
+        return criar_leitor_fatura_totais()(mes)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def tratar_update(update: dict) -> None:
     cq = update.get("callback_query")
     if cq:
@@ -87,22 +99,15 @@ def _tratar_mensagem(msg):
             termo = partes[1] if len(partes) > 1 else None
             _enviar_correcao(s, chat_id, mes, termo)
             return
+        # FONTE ÚNICA: lê os totais da aba Fatura (cartão + Pix) e sincroniza as
+        # metas da planilha — vale para comandos E perguntas livres (IA).
+        realizado_externo = _totais_fatura(s, mes)
+
         if texto.startswith("/"):
-            realizado_externo = None
-            if texto.lower().strip() in ("/resumo", "/start"):
-                try:
-                    from deploy.sheets_adapter import (criar_leitor_fatura_totais,
-                                                       criar_leitor_orcamento)
-                    from controle_financeiro.sheets.orcamento_sync import sincronizar_orcamento
-                    # metas frescas da planilha (reflete edições na hora)
-                    sincronizar_orcamento(s, mes, criar_leitor_orcamento())
-                    realizado_externo = criar_leitor_fatura_totais()(mes)
-                except Exception:  # noqa: BLE001
-                    pass
             resp = responder_comando(s, texto, mes, teto, hoje, realizado_externo=realizado_externo)
         elif os.environ.get("LLM_API_KEY"):
             from deploy.cliente_ia import criar_assistente
-            resp = criar_assistente()(texto, contexto_para_ia(s, mes))
+            resp = criar_assistente()(texto, contexto_para_ia(s, mes, realizado_externo=realizado_externo))
         else:
             resp = ("Pra perguntas livres preciso da IA (LLM_API_KEY). Por ora use: "
                     "/resumo, /linha <categoria>, /pendentes, /ajuda.")

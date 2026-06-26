@@ -2,9 +2,11 @@
 from controle_financeiro.comparador import comparar_orcamento
 from controle_financeiro.models import Transacao, Categoria
 
-def detalhe_linha(sessao, mes: str, categoria_nome: str) -> str:
+def detalhe_linha(sessao, mes: str, categoria_nome: str,
+                  realizado_externo: dict | None = None) -> str:
     alvo = categoria_nome.strip().lower()
-    linhas = {l["linha"].lower(): l for l in comparar_orcamento(sessao, mes)}
+    linhas = {l["linha"].lower(): l
+              for l in comparar_orcamento(sessao, mes, realizado_externo=realizado_externo)}
     l = linhas.get(alvo)
     cat = sessao.query(Categoria).filter(
         Categoria.nome.ilike(categoria_nome.strip())).one_or_none()
@@ -36,12 +38,16 @@ def pendentes_texto(sessao, mes: str) -> str:
         partes.append(f"  - {t.estabelecimento[:26]} R$ {abs(t.valor):.0f}")
     return "\n".join(partes)
 
-def contexto_para_ia(sessao, mes: str) -> str:
-    linhas = comparar_orcamento(sessao, mes)
-    partes = [f"Mês (ciclo de fatura): {mes}", "Orçamento (gasto / meta):"]
+def contexto_para_ia(sessao, mes: str, realizado_externo: dict | None = None) -> str:
+    linhas = comparar_orcamento(sessao, mes, realizado_externo=realizado_externo)
+    partes = [f"Mês (ciclo de fatura): {mes}",
+              "Fonte de verdade = aba Fatura/DRE (cartão + Pix por categoria).",
+              "Orçamento (gasto / meta):"]
     for l in linhas:
         partes.append(f"- {l['linha']}: R$ {l['realizado']:.0f} / R$ {l['meta']:.0f}")
-    partes.append(f"Total gasto no mês: R$ {sum(l['realizado'] for l in linhas):.0f}")
+    total = sum(l["realizado"] for l in linhas
+                if (l["linha"] or "").strip().upper() != "PGTO FATURA")
+    partes.append(f"Total gasto no mês (cartão + Pix): R$ {total:.0f}")
     txs = (sessao.query(Transacao)
            .filter(Transacao.mes_competencia == mes,
                    Transacao.status_classificacao != "estorno")
@@ -64,7 +70,7 @@ def responder_comando(sessao, texto: str, mes: str, teto, hoje: str,
     if cmd == "/linha":
         if not arg:
             return "Use: /linha <categoria>. Ex.: /linha Uber"
-        return detalhe_linha(sessao, mes, arg)
+        return detalhe_linha(sessao, mes, arg, realizado_externo=realizado_externo)
     if cmd == "/pendentes":
         return pendentes_texto(sessao, mes)
     if cmd == "/ajuda":
