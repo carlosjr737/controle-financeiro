@@ -24,6 +24,12 @@ class handler(BaseHTTPRequestHandler):
         if not cron_autorizado(self.headers.get("Authorization"),
                                os.environ.get("CRON_SECRET")):
             return self._responder(401, {"ok": False, "erro": "nao autorizado"})
+        if "probe=fatura" in (self.path or "") or self.headers.get("X-Probe") == "fatura":
+            try:
+                from deploy.probe_fatura import probar_fatura
+                return self._responder(200, {"ok": True, "probe": probar_fatura()})
+            except Exception as e:  # noqa: BLE001
+                return self._responder(500, {"ok": False, "erro": str(e)})
         try:
             hoje = _hoje_sp()
             ciclo = rodar_ciclo(hoje=hoje)
