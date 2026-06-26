@@ -47,22 +47,33 @@ def inicio_ciclo_fatura(mes: str, dia_fechamento: int, margem_dias: int = 0) -> 
 def rodar_ciclo(hoje: datetime.date | None = None) -> dict:
     hoje = hoje or datetime.date.today()
     dia_fechamento = int(os.environ.get("DIA_FECHAMENTO", "6"))
-    mes = competencia_fatura(hoje.isoformat(), dia_fechamento)   # fatura aberta agora
+    mes = hoje.isoformat()[:7]                      # MÊS DO GASTO (calendário)
     teto = float(os.environ.get("TETO_MENSAL", "27060"))
     portador = os.environ.get("PORTADOR", "Carlos")
     revisao_max = int(os.environ.get("REVISAO_MAX", "12"))
     page_size = int(os.environ.get("PAGE_SIZE", "500"))
-    # janela = ciclo da fatura ABERTA (do fechamento anterior até hoje). Mantém o
-    # volume baixo (abaixo do teto da página) e captura a fatura aberta inteira,
-    # sem que compras antigas espremam as recentes. O mês anterior já está no banco.
-    margem = int(os.environ.get("BACKFILL_DIAS", "0"))   # >0 amplia p/ trás se precisar
-    desde = inicio_ciclo_fatura(mes, dia_fechamento, margem).isoformat()
+    # janela = do 1º dia do mês ANTERIOR até hoje (cobre o mês corrente + lançamentos
+    # que postam atrasados). Dedup por id garante que re-puxar é seguro.
+    desde = (hoje.replace(day=1) - datetime.timedelta(days=1)).replace(day=1).isoformat()
     ate = hoje.isoformat()
 
     engine = engine_from_env(); Base.metadata.create_all(engine)
     s = criar_sessao(engine)
     try:
         resultado = {}
+
+        # 0. realinha competência das transações p/ 'mês do gasto' (idempotente)
+        try:
+            from controle_financeiro.models import Transacao
+            n = 0
+            for t in s.query(Transacao).all():
+                if t.data and len(t.data) >= 7 and t.mes_competencia != t.data[:7]:
+                    t.mes_competencia = t.data[:7]; n += 1
+            if n:
+                s.commit()
+            resultado["recompetencia"] = n
+        except Exception as e:  # noqa: BLE001
+            resultado["recompetencia_aviso"] = str(e)
 
         # 1. orçamento + vocabulário da DRE
         try:
@@ -111,18 +122,9 @@ def rodar_ciclo(hoje: datetime.date | None = None) -> dict:
         except Exception as e:  # noqa: BLE001
             resultado["totais_aviso"] = str(e)
 
-        # 5b. reconcilia o cartão: mês fechado = oficial; aberto = compras + parcelas projetadas
+        # 5b. 'mês do gasto': o total do mês já é o realizado da aba (cartão + Pix);
+        # sem reconciliação de fatura do banco (que é por ciclo, não por mês).
         fatura_cartao = None
-        try:
-            faturas = fonte.buscar_faturas(dia_fechamento)
-            def _compras(m):
-                return sum(l["valor"] for l in linhas_para_fatura(s, m) if l["valor"] > 0)
-            cap = {mes: _compras(mes), _mes_anterior(mes): _compras(_mes_anterior(mes))}
-            proj = projecao_parcelas(s, mes, _mes_anterior(mes))
-            fatura_cartao = reconciliar_cartao(mes, cap, faturas, projecao_parcelas=proj)
-            resultado["fatura_cartao"] = fatura_cartao
-        except Exception as e:  # noqa: BLE001
-            resultado["fatura_cartao_aviso"] = str(e)
 
         # 6. resumo no Telegram (espelhando a DRE)
         enviar_resumo(s, mes, hoje.isoformat(), enviar=criar_enviar(), teto=teto,

@@ -32,4 +32,4 @@ def test_conta_usa_ciclo_de_fatura():
     ingerir(s, BancoMcpFonte(transporte=transporte, account_id="conta1"),
             Classificador(s), "2026-07-01", "2026-07-31", tipo="conta", dia_fechamento=6)
     t = s.query(Transacao).filter_by(id_externo="g2").one()
-    assert t.mes_competencia == "2026-08"   # dia 10 > fechamento 6 -> próxima fatura
+    assert t.mes_competencia == "2026-07"   # 'mês do gasto' = mês calendário da data
