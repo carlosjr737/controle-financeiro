@@ -41,8 +41,18 @@ def probar_fatura() -> dict:
         for corpo in corpos:
             try:
                 resp = transporte(caminho, corpo)
-                return {"ok": True, "endpoint": caminho,
-                        "corpo": list(corpo.keys()), "resposta": _resumir(resp)}
+                result = resp.get("result") or {}
+                bruto = result.get("results")
+                faturas = []
+                if isinstance(bruto, list):
+                    for b in bruto:
+                        faturas.append({
+                            "dueDate": (b.get("dueDate") or "")[:10],
+                            "totalAmount": b.get("totalAmount"),
+                            "payment_status": b.get("payment_status"),
+                        })
+                return {"ok": True, "endpoint": caminho, "corpo": list(corpo.keys()),
+                        "faturas": faturas or _resumir(resp)}
             except Exception as e:  # noqa: BLE001
                 msg = str(e)
                 tentativas.append({"endpoint": caminho,
