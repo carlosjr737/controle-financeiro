@@ -91,13 +91,10 @@ def rodar_ciclo(hoje: datetime.date | None = None) -> dict:
         if extra:
             resultado["ingestao_extra"] = extra
 
-        # 4. escreve a aba 'Fatura' (cartão) ANTES de ler os totais
+        # 4. escreve a aba 'Fatura' do MÊS ABERTO só (nunca mexe em mês fechado)
         try:
             escritor_fatura = criar_escritor_fatura()
-            res_fat = {}
-            for m in (mes, _mes_anterior(mes)):
-                linhas_m = linhas_para_fatura(s, m)
-                res_fat[m] = escritor_fatura(m, linhas_m)
+            res_fat = {mes: escritor_fatura(mes, linhas_para_fatura(s, mes))}
             resultado["fatura"] = res_fat
             # diagnóstico: total do CARTÃO da fatura aberta (compare com o app)
             linhas_aberta = linhas_para_fatura(s, mes)
