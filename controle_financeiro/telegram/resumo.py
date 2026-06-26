@@ -2,7 +2,8 @@ from controle_financeiro.models import Transacao, Categoria
 from controle_financeiro.comparador import comparar_orcamento
 
 def montar_resumo_diario(sessao, mes: str, data: str, teto: float | None = None,
-                         realizado_externo: dict | None = None) -> str:
+                         realizado_externo: dict | None = None,
+                         fatura_cartao: dict | None = None) -> str:
     linhas = comparar_orcamento(sessao, mes, realizado_externo=realizado_externo)
     pendentes = (sessao.query(Transacao)
                  .filter(Transacao.mes_competencia == mes,
@@ -33,8 +34,20 @@ def montar_resumo_diario(sessao, mes: str, data: str, teto: float | None = None,
                  .filter(Transacao.mes_competencia == mes,
                          Transacao.status_classificacao.notin_(["estorno", "pagamento"])).all())
         realizado_total = sum(abs(t.valor) for t in todas)
+    # encargos/parcelas/IOF do cartão (não aparecem como compra no extrato)
+    encargos = (fatura_cartao or {}).get("encargos", 0.0) or 0.0
+    realizado_total += encargos
     teto_txt = f" (teto R$ {teto:.0f})" if teto else ""
     partes.append(f"Já gasto no mês: R$ {realizado_total:.0f}{teto_txt}")
+
+    if fatura_cartao and fatura_cartao.get("total"):
+        if fatura_cartao.get("oficial"):
+            partes.append(f"💳 Fatura cartão (oficial do banco): R$ {fatura_cartao['total']:.0f}")
+        else:
+            partes.append(
+                f"💳 Fatura cartão (estimada): R$ {fatura_cartao['total']:.0f} "
+                f"— compras R$ {fatura_cartao['compras']:.0f} + "
+                f"encargos/parcelas ~R$ {encargos:.0f}")
 
     # FOCO: o que estourou e o que está quase
     estourou = sorted([l for l in linhas if l["status"] == "vermelho"],

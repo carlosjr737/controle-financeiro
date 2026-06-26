@@ -38,16 +38,24 @@ def pendentes_texto(sessao, mes: str) -> str:
         partes.append(f"  - {t.estabelecimento[:26]} R$ {abs(t.valor):.0f}")
     return "\n".join(partes)
 
-def contexto_para_ia(sessao, mes: str, realizado_externo: dict | None = None) -> str:
+def contexto_para_ia(sessao, mes: str, realizado_externo: dict | None = None,
+                     fatura_cartao: dict | None = None) -> str:
     linhas = comparar_orcamento(sessao, mes, realizado_externo=realizado_externo)
     partes = [f"Mês (ciclo de fatura): {mes}",
               "Fonte de verdade = aba Fatura/DRE (cartão + Pix por categoria).",
               "Orçamento (gasto / meta):"]
     for l in linhas:
         partes.append(f"- {l['linha']}: R$ {l['realizado']:.0f} / R$ {l['meta']:.0f}")
+    encargos = (fatura_cartao or {}).get("encargos", 0.0) or 0.0
     total = sum(l["realizado"] for l in linhas
-                if (l["linha"] or "").strip().upper() != "PGTO FATURA")
+                if (l["linha"] or "").strip().upper() != "PGTO FATURA") + encargos
     partes.append(f"Total gasto no mês (cartão + Pix): R$ {total:.0f}")
+    if fatura_cartao and fatura_cartao.get("total"):
+        tag = "oficial do banco" if fatura_cartao.get("oficial") else "estimada (fatura ainda aberta)"
+        partes.append(
+            f"Fatura do cartão ({tag}): R$ {fatura_cartao['total']:.0f} "
+            f"(compras R$ {fatura_cartao['compras']:.0f} + encargos/parcelas/IOF "
+            f"R$ {encargos:.0f}). Use este valor pra 'quanto gastei no cartão'.")
     txs = (sessao.query(Transacao)
            .filter(Transacao.mes_competencia == mes,
                    Transacao.status_classificacao != "estorno")
@@ -59,14 +67,16 @@ def contexto_para_ia(sessao, mes: str, realizado_externo: dict | None = None) ->
     return "\n".join(partes)
 
 def responder_comando(sessao, texto: str, mes: str, teto, hoje: str,
-                      realizado_externo: dict | None = None) -> str:
+                      realizado_externo: dict | None = None,
+                      fatura_cartao: dict | None = None) -> str:
     partes = texto.split(maxsplit=1)
     cmd = partes[0].lower()
     arg = partes[1] if len(partes) > 1 else ""
     if cmd in ("/resumo", "/start"):
         from controle_financeiro.telegram.resumo import montar_resumo_diario
         return montar_resumo_diario(sessao, mes, hoje, teto=teto,
-                                    realizado_externo=realizado_externo)
+                                    realizado_externo=realizado_externo,
+                                    fatura_cartao=fatura_cartao)
     if cmd == "/linha":
         if not arg:
             return "Use: /linha <categoria>. Ex.: /linha Uber"

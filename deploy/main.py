@@ -16,6 +16,7 @@ from controle_financeiro.revisao import (reclassificar_pendentes,
                                          categorias_frequentes, transacoes_para_revisar)
 from controle_financeiro.telegram.botoes import montar_teclado
 from controle_financeiro.dre_fatura import linhas_para_fatura
+from controle_financeiro.reconciliacao import reconciliar_cartao
 
 from deploy.transporte_banco_mcp import criar_transporte
 from deploy.cliente_ia import criar_cliente_ia
@@ -112,9 +113,21 @@ def rodar_ciclo(hoje: datetime.date | None = None) -> dict:
         except Exception as e:  # noqa: BLE001
             resultado["totais_aviso"] = str(e)
 
+        # 5b. reconcilia o cartão com a fatura OFICIAL do banco (híbrido)
+        fatura_cartao = None
+        try:
+            faturas = fonte.buscar_faturas(dia_fechamento)
+            def _compras(m):
+                return sum(l["valor"] for l in linhas_para_fatura(s, m) if l["valor"] > 0)
+            cap = {mes: _compras(mes), _mes_anterior(mes): _compras(_mes_anterior(mes))}
+            fatura_cartao = reconciliar_cartao(mes, cap, faturas)
+            resultado["fatura_cartao"] = fatura_cartao
+        except Exception as e:  # noqa: BLE001
+            resultado["fatura_cartao_aviso"] = str(e)
+
         # 6. resumo no Telegram (espelhando a DRE)
         enviar_resumo(s, mes, hoje.isoformat(), enviar=criar_enviar(), teto=teto,
-                      realizado_externo=realizado_externo)
+                      realizado_externo=realizado_externo, fatura_cartao=fatura_cartao)
 
         # 7. IA nos pendentes + botões (melhor esforço)
         try:

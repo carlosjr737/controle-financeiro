@@ -33,3 +33,24 @@ class BancoMcpFonte:
                 break
             vistos.add(cursor)
         return todas
+
+    def buscar_faturas(self, closing_day=None) -> list[dict]:
+        """Faturas FECHADAS do cartão (valor oficial exato do banco).
+        Devolve [{competencia 'AAAA-MM', due, total, status}]. A competência é o
+        mês do vencimento (fatura que vence 15/06 = competência 2026-06)."""
+        body = {"account_id": self.account_id}
+        if closing_day is not None:
+            body["closing_day"] = closing_day
+        resp = self.transporte("/credit-card-bills/list", body)
+        result = resp.get("result") or {}
+        out = []
+        for b in (result.get("results") or []):
+            due = (b.get("dueDate") or "")[:10]
+            try:
+                total = float(b.get("totalAmount"))
+            except (TypeError, ValueError):
+                continue
+            if len(due) >= 7:
+                out.append({"competencia": due[:7], "due": due,
+                            "total": total, "status": b.get("payment_status")})
+        return out

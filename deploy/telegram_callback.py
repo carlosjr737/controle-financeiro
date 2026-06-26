@@ -40,6 +40,29 @@ def _totais_fatura(s, mes):
         return None
 
 
+def _fatura_cartao(s, mes):
+    """Reconcilia o cartão com a fatura oficial do banco (híbrido). None se falhar."""
+    try:
+        from controle_financeiro.fontes.banco_mcp import BancoMcpFonte
+        from controle_financeiro.dre_fatura import linhas_para_fatura
+        from controle_financeiro.reconciliacao import reconciliar_cartao
+        from controle_financeiro.competencia import competencia_fatura  # noqa: F401
+        from deploy.transporte_banco_mcp import criar_transporte
+        dia = int(os.environ.get("DIA_FECHAMENTO", "6"))
+        fonte = BancoMcpFonte(transporte=criar_transporte(),
+                              account_id=os.environ["XP_ACCOUNT_ID_CARTAO"])
+        faturas = fonte.buscar_faturas(dia)
+        ano, m = int(mes[:4]), int(mes[5:7]) - 1
+        if m == 0:
+            ano, m = ano - 1, 12
+        prev = f"{ano:04d}-{m:02d}"
+        compras = {x: sum(l["valor"] for l in linhas_para_fatura(s, x) if l["valor"] > 0)
+                   for x in (mes, prev)}
+        return reconciliar_cartao(mes, compras, faturas)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def tratar_update(update: dict) -> None:
     cq = update.get("callback_query")
     if cq:
@@ -102,12 +125,16 @@ def _tratar_mensagem(msg):
         # FONTE ÚNICA: lê os totais da aba Fatura (cartão + Pix) e sincroniza as
         # metas da planilha — vale para comandos E perguntas livres (IA).
         realizado_externo = _totais_fatura(s, mes)
+        fatura_cartao = _fatura_cartao(s, mes)
 
         if texto.startswith("/"):
-            resp = responder_comando(s, texto, mes, teto, hoje, realizado_externo=realizado_externo)
+            resp = responder_comando(s, texto, mes, teto, hoje,
+                                     realizado_externo=realizado_externo,
+                                     fatura_cartao=fatura_cartao)
         elif os.environ.get("LLM_API_KEY"):
             from deploy.cliente_ia import criar_assistente
-            resp = criar_assistente()(texto, contexto_para_ia(s, mes, realizado_externo=realizado_externo))
+            resp = criar_assistente()(texto, contexto_para_ia(
+                s, mes, realizado_externo=realizado_externo, fatura_cartao=fatura_cartao))
         else:
             resp = ("Pra perguntas livres preciso da IA (LLM_API_KEY). Por ora use: "
                     "/resumo, /linha <categoria>, /pendentes, /ajuda.")
