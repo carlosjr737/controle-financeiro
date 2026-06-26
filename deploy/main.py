@@ -31,6 +31,17 @@ def _mes_anterior(mes: str) -> str:
     return f"{ano:04d}-{m:02d}"
 
 
+def inicio_ciclo_fatura(mes: str, dia_fechamento: int, margem_dias: int = 0) -> datetime.date:
+    """1º dia do ciclo da fatura `mes` (competência): dia seguinte ao fechamento,
+    no mês calendário anterior. Ex.: fatura 2026-07, fecha dia 6 -> 2026-06-07.
+    `margem_dias` recua mais pra trás (backfill manual, se necessário)."""
+    ano, m = int(mes[:4]), int(mes[5:7]) - 1
+    if m == 0:
+        m = 12; ano -= 1
+    inicio = datetime.date(ano, m, min(dia_fechamento + 1, 28))
+    return inicio - datetime.timedelta(days=max(margem_dias, 0))
+
+
 def rodar_ciclo(hoje: datetime.date | None = None) -> dict:
     hoje = hoje or datetime.date.today()
     dia_fechamento = int(os.environ.get("DIA_FECHAMENTO", "6"))
@@ -39,12 +50,11 @@ def rodar_ciclo(hoje: datetime.date | None = None) -> dict:
     portador = os.environ.get("PORTADOR", "Carlos")
     revisao_max = int(os.environ.get("REVISAO_MAX", "12"))
     page_size = int(os.environ.get("PAGE_SIZE", "500"))
-    # janela cobre a fatura aberta INTEIRA (e a anterior): 1º dia de 2 meses atrás.
-    # Dedup por id garante que re-puxar é seguro.
-    ini_ano, ini_m = hoje.year, hoje.month - 2
-    while ini_m <= 0:
-        ini_m += 12; ini_ano -= 1
-    desde = datetime.date(ini_ano, ini_m, 1).isoformat()
+    # janela = ciclo da fatura ABERTA (do fechamento anterior até hoje). Mantém o
+    # volume baixo (abaixo do teto da página) e captura a fatura aberta inteira,
+    # sem que compras antigas espremam as recentes. O mês anterior já está no banco.
+    margem = int(os.environ.get("BACKFILL_DIAS", "0"))   # >0 amplia p/ trás se precisar
+    desde = inicio_ciclo_fatura(mes, dia_fechamento, margem).isoformat()
     ate = hoje.isoformat()
 
     engine = engine_from_env(); Base.metadata.create_all(engine)
