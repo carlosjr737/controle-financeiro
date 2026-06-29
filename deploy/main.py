@@ -11,7 +11,7 @@ from controle_financeiro.ingestao import ingerir
 from controle_financeiro.telegram.bot import enviar_resumo
 from controle_financeiro.sheets.orcamento_sync import sincronizar_orcamento, sincronizar_categorias
 from controle_financeiro.ia.fallback import criar_fallback_ia
-from controle_financeiro.competencia import competencia_fatura
+from controle_financeiro.competencia import competencia_fatura, competencia_ciclo
 from controle_financeiro.revisao import (reclassificar_pendentes,
                                          categorias_frequentes, transacoes_para_revisar)
 from controle_financeiro.telegram.botoes import montar_teclado
@@ -47,7 +47,7 @@ def inicio_ciclo_fatura(mes: str, dia_fechamento: int, margem_dias: int = 0) -> 
 def rodar_ciclo(hoje: datetime.date | None = None) -> dict:
     hoje = hoje or datetime.date.today()
     dia_fechamento = int(os.environ.get("DIA_FECHAMENTO", "7"))
-    mes = hoje.isoformat()[:7]                       # DRE = competência (mês do gasto)
+    mes = competencia_ciclo(hoje.isoformat(), dia_fechamento)   # ciclo da fatura aberta
     teto = float(os.environ.get("TETO_MENSAL", "27060"))
     portador = os.environ.get("PORTADOR", "Carlos")
     revisao_max = int(os.environ.get("REVISAO_MAX", "12"))
@@ -61,13 +61,15 @@ def rodar_ciclo(hoje: datetime.date | None = None) -> dict:
     try:
         resultado = {}
 
-        # 0. realinha competência das transações p/ o MÊS DO GASTO (idempotente)
+        # 0. realinha competência das transações p/ o ciclo da fatura (idempotente)
         try:
             from controle_financeiro.models import Transacao
             n = 0
             for t in s.query(Transacao).all():
-                if t.data and len(t.data) >= 7 and t.mes_competencia != t.data[:7]:
-                    t.mes_competencia = t.data[:7]; n += 1
+                if t.data and len(t.data) >= 10:
+                    alvo = competencia_ciclo(t.data, dia_fechamento)
+                    if t.mes_competencia != alvo:
+                        t.mes_competencia = alvo; n += 1
             if n:
                 s.commit()
             resultado["recompetencia"] = n

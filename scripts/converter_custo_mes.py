@@ -46,11 +46,19 @@ def _norm(s):
     return "".join(c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn")
 
 
+DIA_FECHAMENTO = int(os.environ.get("DIA_FECHAMENTO", "7"))
+
+
 def _mes(v):
+    # agrupa pelo CICLO DA FATURA (fecha dia 7), rotulado pelo mês que cobre
+    from controle_financeiro.competencia import competencia_ciclo
     if isinstance(v, (datetime.datetime, datetime.date)):
-        return v.strftime("%Y-%m")
-    s = str(v or "")[:10]
-    return s[:7] if len(s) >= 7 and s[4] == "-" else None
+        s = v.strftime("%Y-%m-%d")
+    else:
+        s = str(v or "")[:10]
+    if len(s) < 10 or s[4] != "-":
+        return None
+    return competencia_ciclo(s, DIA_FECHAMENTO)
 
 
 def _eh_of(r):

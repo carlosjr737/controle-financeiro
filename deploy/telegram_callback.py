@@ -6,7 +6,7 @@ import datetime
 from controle_financeiro.config import engine_from_env
 from controle_financeiro.db import criar_sessao, Base
 from controle_financeiro.models import Categoria
-from controle_financeiro.competencia import competencia_fatura
+from controle_financeiro.competencia import competencia_fatura, competencia_ciclo
 from controle_financeiro.telegram.botoes import parse_callback, montar_pagina_categorias
 from controle_financeiro.aprendizado import confirmar_sugestao, corrigir_por_categoria_id
 from controle_financeiro.consultas import responder_comando, contexto_para_ia
@@ -20,7 +20,8 @@ def _sessao():
 
 def _mes_hoje():
     hoje = datetime.date.today()
-    return hoje.isoformat()[:7], hoje.isoformat()   # DRE = competência (mês do gasto)
+    dia = int(os.environ.get("DIA_FECHAMENTO", "7"))
+    return competencia_ciclo(hoje.isoformat(), dia), hoje.isoformat()
 
 def _eh_dono(chat_id) -> bool:
     dono = os.environ.get("TELEGRAM_CHAT_ID")
