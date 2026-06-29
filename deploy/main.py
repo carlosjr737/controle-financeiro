@@ -123,14 +123,19 @@ def rodar_ciclo(hoje: datetime.date | None = None) -> dict:
         except Exception as e:  # noqa: BLE001
             resultado["totais_aviso"] = str(e)
 
-        # 5b. DRE = competência: o total do mês é o realizado da aba (cartão + Pix).
-        # A fatura do banco (caixa) fica só como referência de pagamento.
+        # 5b. projeta as parcelas que ainda vão postar nesta fatura (postam ~no
+        # fechamento) -> Telegram mostra o total que bate com a fatura do banco.
         fatura_cartao = None
         try:
             faturas = fonte.buscar_faturas(dia_fechamento)
-            resultado["fatura_banco"] = {(f["competencia"]): f["total"] for f in faturas[:3]}
+            def _compras(m):
+                return sum(l["valor"] for l in linhas_para_fatura(s, m) if l["valor"] > 0)
+            cap = {mes: _compras(mes), _mes_anterior(mes): _compras(_mes_anterior(mes))}
+            proj = projecao_parcelas(s, mes, _mes_anterior(mes))
+            fatura_cartao = reconciliar_cartao(mes, cap, faturas, projecao_parcelas=proj)
+            resultado["fatura_cartao"] = fatura_cartao
         except Exception as e:  # noqa: BLE001
-            resultado["fatura_banco_aviso"] = str(e)
+            resultado["fatura_cartao_aviso"] = str(e)
 
         # 6. resumo no Telegram (espelhando a DRE)
         enviar_resumo(s, mes, hoje.isoformat(), enviar=criar_enviar(), teto=teto,

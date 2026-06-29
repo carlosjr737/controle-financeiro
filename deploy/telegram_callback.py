@@ -126,7 +126,7 @@ def _tratar_mensagem(msg):
         # FONTE ÚNICA: lê os totais da aba Fatura (cartão + Pix) e sincroniza as
         # metas da planilha — vale para comandos E perguntas livres (IA).
         realizado_externo = _totais_fatura(s, mes)
-        fatura_cartao = None       # DRE = competência: total da aba já é o do mês
+        fatura_cartao = _fatura_cartao(s, mes)   # projeta parcelas p/ bater com o banco
 
         if texto.startswith("/"):
             resp = responder_comando(s, texto, mes, teto, hoje,
