@@ -103,18 +103,20 @@ def rodar_ciclo(hoje: datetime.date | None = None) -> dict:
         if extra:
             resultado["ingestao_extra"] = extra
 
-        # 4. escreve a aba 'Fatura' do MÊS ABERTO só (nunca mexe em mês fechado)
-        try:
-            escritor_fatura = criar_escritor_fatura()
-            res_fat = {mes: escritor_fatura(mes, linhas_para_fatura(s, mes))}
-            resultado["fatura"] = res_fat
-            # diagnóstico: total do CARTÃO da fatura aberta (compare com o app)
-            linhas_aberta = linhas_para_fatura(s, mes)
-            gastos = [l["valor"] for l in linhas_aberta if l["valor"] > 0]
-            resultado["cartao_fatura_aberta"] = {
-                "mes": mes, "lancamentos": len(gastos), "total": round(sum(gastos), 2)}
-        except Exception as e:  # noqa: BLE001
-            resultado["fatura_aviso"] = str(e)
+        # 4. constrói a aba 'Fatura' do MÊS ABERTO com o extrato do dia.
+        # Meses já fechados/importados (fatura manual) ficam PROTEGIDOS.
+        protegidos = {m.strip() for m in os.environ.get("MESES_PROTEGIDOS", "2026-06,2026-07").split(",") if m.strip()}
+        if mes in protegidos:
+            resultado["fatura"] = f"{mes} protegido (fatura importada) — não sobrescreve"
+        else:
+            try:
+                escritor_fatura = criar_escritor_fatura()
+                resultado["fatura"] = {mes: escritor_fatura(mes, linhas_para_fatura(s, mes))}
+                gastos = [l["valor"] for l in linhas_para_fatura(s, mes) if l["valor"] > 0]
+                resultado["cartao_mes"] = {"mes": mes, "lancamentos": len(gastos),
+                                           "total": round(sum(gastos), 2)}
+            except Exception as e:  # noqa: BLE001
+                resultado["fatura_aviso"] = str(e)
 
         # 5. lê os totais da Fatura aberta (cartão + Pix manuais) — espelho da DRE
         realizado_externo = None
@@ -123,23 +125,9 @@ def rodar_ciclo(hoje: datetime.date | None = None) -> dict:
         except Exception as e:  # noqa: BLE001
             resultado["totais_aviso"] = str(e)
 
-        # 5b. projeta as parcelas que ainda vão postar nesta fatura (postam ~no
-        # fechamento) -> Telegram mostra o total que bate com a fatura do banco.
-        fatura_cartao = None
-        try:
-            faturas = fonte.buscar_faturas(dia_fechamento)
-            def _compras(m):
-                return sum(l["valor"] for l in linhas_para_fatura(s, m) if l["valor"] > 0)
-            cap = {mes: _compras(mes), _mes_anterior(mes): _compras(_mes_anterior(mes))}
-            proj = projecao_parcelas(s, mes, _mes_anterior(mes))
-            fatura_cartao = reconciliar_cartao(mes, cap, faturas, projecao_parcelas=proj)
-            resultado["fatura_cartao"] = fatura_cartao
-        except Exception as e:  # noqa: BLE001
-            resultado["fatura_cartao_aviso"] = str(e)
-
-        # 6. resumo no Telegram (espelhando a DRE)
+        # 6. resumo no Telegram: gasto do mês (extrato) vs orçamento — controle diário
         enviar_resumo(s, mes, hoje.isoformat(), enviar=criar_enviar(), teto=teto,
-                      realizado_externo=realizado_externo, fatura_cartao=fatura_cartao)
+                      realizado_externo=realizado_externo, fatura_cartao=None)
 
         # 7. IA nos pendentes + botões (melhor esforço)
         try:
