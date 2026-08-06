@@ -6,6 +6,25 @@ import os
 from deploy.transporte_banco_mcp import criar_transporte
 
 
+def probar_transacoes() -> dict:
+    """Mostra o account_id que está no ambiente e testa a busca de transações."""
+    import datetime
+    from controle_financeiro.fontes.banco_mcp import BancoMcpFonte
+    acc = os.environ.get("XP_ACCOUNT_ID_CARTAO")
+    hoje = datetime.date.today()
+    desde = (hoje - datetime.timedelta(days=60)).isoformat()
+    fonte = BancoMcpFonte(transporte=criar_transporte(), account_id=acc, page_size=500)
+    try:
+        raws = fonte.buscar_transacoes(desde, hoje.isoformat())
+    except Exception as e:  # noqa: BLE001
+        return {"account_id_no_ambiente": acc, "erro": str(e)[:200]}
+    amostra = [{"date": str(r.get("date"))[:10],
+                "desc": (r.get("description") or "")[:26],
+                "amount": r.get("amount")} for r in raws[:6]]
+    return {"account_id_no_ambiente": acc, "janela": [desde, hoje.isoformat()],
+            "qtd_transacoes": len(raws), "amostra": amostra}
+
+
 def probar_contas() -> dict:
     """Lista as contas/conexões atuais do banco (pra pegar o account_id novo)."""
     transporte = criar_transporte()

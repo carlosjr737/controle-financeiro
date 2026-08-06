@@ -27,8 +27,9 @@ class handler(BaseHTTPRequestHandler):
         probe = self.headers.get("X-Probe")
         if probe:
             try:
-                from deploy.probe_fatura import probar_fatura, probar_contas
-                fn = {"fatura": probar_fatura, "contas": probar_contas}.get(probe)
+                from deploy.probe_fatura import probar_fatura, probar_contas, probar_transacoes
+                fn = {"fatura": probar_fatura, "contas": probar_contas,
+                      "transacoes": probar_transacoes}.get(probe)
                 if fn:
                     return self._responder(200, {"ok": True, "probe": fn()})
             except Exception as e:  # noqa: BLE001
