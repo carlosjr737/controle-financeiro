@@ -11,12 +11,21 @@ def _api(metodo: str, payload: dict):
                   json=payload, timeout=15)
 
 def criar_enviar(token: str | None = None, chat_id: str | None = None):
+    """Envia o resumo pro dono + destinos extras (esposa/grupo) via
+    TELEGRAM_CHAT_IDS_EXTRA (ids separados por vírgula)."""
     tok = token or os.environ["TELEGRAM_BOT_TOKEN"]
-    cid = chat_id or os.environ["TELEGRAM_CHAT_ID"]
+    principal = chat_id or os.environ["TELEGRAM_CHAT_ID"]
+    extras = [c.strip() for c in os.environ.get("TELEGRAM_CHAT_IDS_EXTRA", "").split(",") if c.strip()]
+    destinos = [principal] + [e for e in extras if e != principal]
+
     def enviar(texto: str) -> None:
         import requests
-        requests.post(f"https://api.telegram.org/bot{tok}/sendMessage",
-                      json={"chat_id": cid, "text": texto}, timeout=15).raise_for_status()
+        for cid in destinos:
+            try:
+                requests.post(f"https://api.telegram.org/bot{tok}/sendMessage",
+                              json={"chat_id": cid, "text": texto}, timeout=15)
+            except Exception:  # noqa: BLE001
+                pass
     return enviar
 
 def criar_enviar_botoes(token: str | None = None, chat_id: str | None = None):

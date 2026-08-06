@@ -109,6 +109,9 @@ def _tratar_callback(cq):
 def _tratar_mensagem(msg):
     texto = msg["text"].strip()
     chat_id = msg["chat"]["id"]
+    if texto.lower().strip() in ("/id", "/meuid"):   # qualquer um pode pegar o chat_id
+        responder_chat(chat_id, f"Este chat_id é: {chat_id}")
+        return
     if not _eh_dono(chat_id):
         return
     engine, s = _sessao()
