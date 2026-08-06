@@ -24,10 +24,13 @@ class handler(BaseHTTPRequestHandler):
         if not cron_autorizado(self.headers.get("Authorization"),
                                os.environ.get("CRON_SECRET")):
             return self._responder(401, {"ok": False, "erro": "nao autorizado"})
-        if self.headers.get("X-Probe") == "fatura":
+        probe = self.headers.get("X-Probe")
+        if probe:
             try:
-                from deploy.probe_fatura import probar_fatura
-                return self._responder(200, {"ok": True, "probe": probar_fatura()})
+                from deploy.probe_fatura import probar_fatura, probar_contas
+                fn = {"fatura": probar_fatura, "contas": probar_contas}.get(probe)
+                if fn:
+                    return self._responder(200, {"ok": True, "probe": fn()})
             except Exception as e:  # noqa: BLE001
                 return self._responder(500, {"ok": False, "erro": str(e)})
         try:

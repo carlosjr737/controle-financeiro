@@ -6,6 +6,32 @@ import os
 from deploy.transporte_banco_mcp import criar_transporte
 
 
+def probar_contas() -> dict:
+    """Lista as contas/conexões atuais do banco (pra pegar o account_id novo)."""
+    transporte = criar_transporte()
+    out = {}
+    for cam in ["/accounts/list", "/connections/list", "/account/list",
+                "/openfinance/accounts/list", "/accounts"]:
+        try:
+            resp = transporte(cam, {})
+            result = resp.get("result") or resp
+            itens = (result.get("results") if isinstance(result, dict) else None) or result
+            contas = []
+            if isinstance(itens, list):
+                for a in itens:
+                    if isinstance(a, dict):
+                        contas.append({k: a.get(k) for k in
+                                       ("id", "account_id", "name", "type", "institution",
+                                        "product", "number", "brand") if a.get(k) is not None})
+            out[cam] = contas or _resumir(resp)
+            if contas:
+                break
+        except Exception as e:  # noqa: BLE001
+            if "404" not in str(e) and "405" not in str(e):
+                out[cam + " (erro)"] = str(e)[:140]
+    return out
+
+
 def _resumir(v, prof=0):
     if isinstance(v, dict):
         return {k: _resumir(x, prof + 1) for k, x in list(v.items())[:40]}
