@@ -5,6 +5,21 @@ import os
 def _tok():
     return os.environ["TELEGRAM_BOT_TOKEN"]
 
+
+def _destinos_da_planilha():
+    """Lê chat_ids extras da aba 'destinatarios' (coluna A). Vazio se falhar."""
+    try:
+        from deploy.sheets_adapter import _abrir_planilha
+        ws = _abrir_planilha().worksheet("destinatarios")
+        out = []
+        for r in ws.get_all_values():
+            c = (r[0].strip() if r else "")
+            if c and c.lower() not in ("chat_id", "id", "destinatario"):
+                out.append(c)
+        return out
+    except Exception:  # noqa: BLE001
+        return []
+
 def _api(metodo: str, payload: dict):
     import requests
     requests.post(f"https://api.telegram.org/bot{_tok()}/{metodo}",
@@ -16,7 +31,11 @@ def criar_enviar(token: str | None = None, chat_id: str | None = None):
     tok = token or os.environ["TELEGRAM_BOT_TOKEN"]
     principal = chat_id or os.environ["TELEGRAM_CHAT_ID"]
     extras = [c.strip() for c in os.environ.get("TELEGRAM_CHAT_IDS_EXTRA", "").split(",") if c.strip()]
-    destinos = [principal] + [e for e in extras if e != principal]
+    extras += _destinos_da_planilha()
+    destinos, vistos = [], set()
+    for d in [principal] + extras:
+        if d and d not in vistos:
+            vistos.add(d); destinos.append(d)
 
     def enviar(texto: str) -> None:
         import requests

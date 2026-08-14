@@ -106,9 +106,28 @@ def _tratar_callback(cq):
         s.close(); engine.dispose()
 
 
+def _registrar_chat(msg):
+    """Anota quem mandou mensagem numa aba 'log_ids' (pra pegar o id da esposa)."""
+    try:
+        import gspread
+        from deploy.sheets_adapter import _abrir_planilha
+        ch = msg.get("chat") or {}
+        pl = _abrir_planilha()
+        try:
+            ws = pl.worksheet("log_ids")
+        except gspread.WorksheetNotFound:
+            ws = pl.add_worksheet(title="log_ids", rows=200, cols=4)
+            ws.append_row(["chat_id", "nome", "tipo", "texto"])
+        ws.append_row([str(ch.get("id")), ch.get("first_name") or ch.get("title") or "",
+                       ch.get("type"), (msg.get("text") or "")[:30]])
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _tratar_mensagem(msg):
     texto = msg["text"].strip()
     chat_id = msg["chat"]["id"]
+    _registrar_chat(msg)
     if texto.lower().strip() in ("/id", "/meuid"):   # qualquer um pode pegar o chat_id
         responder_chat(chat_id, f"Este chat_id é: {chat_id}")
         return
