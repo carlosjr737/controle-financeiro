@@ -6,6 +6,33 @@ import os
 from deploy.transporte_banco_mcp import criar_transporte
 
 
+def probar_bot() -> dict:
+    """Nome do bot (getMe) + últimos que mandaram msg (getUpdates) -> acha o chat_id
+    de quem escreveu (ex.: a esposa)."""
+    import requests
+    tok = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    out = {}
+    try:
+        me = requests.get(f"https://api.telegram.org/bot{tok}/getMe", timeout=15).json()
+        u = (me.get("result") or {}).get("username")
+        out["bot"] = {"username": u, "link": f"https://t.me/{u}" if u else None}
+    except Exception as e:  # noqa: BLE001
+        out["bot_erro"] = str(e)[:120]
+    try:
+        upd = requests.get(f"https://api.telegram.org/bot{tok}/getUpdates", timeout=15).json()
+        quem = {}
+        for u in upd.get("result", []):
+            msg = u.get("message") or u.get("edited_message") or {}
+            ch = msg.get("chat") or {}
+            if ch.get("id"):
+                quem[str(ch["id"])] = {"nome": ch.get("first_name") or ch.get("title"),
+                                       "tipo": ch.get("type")}
+        out["quem_escreveu"] = quem
+    except Exception as e:  # noqa: BLE001
+        out["updates_erro"] = str(e)[:120]
+    return out
+
+
 def probar_transacoes() -> dict:
     """Mostra o account_id que está no ambiente e testa a busca de transações."""
     import datetime
