@@ -9,10 +9,11 @@ def aba_fatura(mes: str) -> str:
     return f"Fatura {MESES[int(mes[5:7]) - 1]}"
 
 def linhas_para_fatura(sessao, mes: str) -> list[dict]:
+    # exclui estorno E pagamento de fatura (o pagamento não é gasto -> não vai pra DRE)
     q = (sessao.query(Transacao)
          .filter(Transacao.mes_competencia == mes,
                  Transacao.tipo == "cartao",
-                 Transacao.status_classificacao != "estorno"))
+                 Transacao.status_classificacao.notin_(["estorno", "pagamento"])))
     linhas = []
     for t in q:
         cat = sessao.get(Categoria, t.categoria_id) if t.categoria_id else None
